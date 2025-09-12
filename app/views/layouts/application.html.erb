@@ -16,6 +16,12 @@
     <%= stylesheet_link_tag "tailwind", "data-turbo-track": "reload" %>
     <%= stylesheet_link_tag "application", "data-turbo-track": "reload" %>
     <%= javascript_include_tag "application", "data-turbo-track": "reload", type: "module" %>
+
+    <!-- ✅ Google Maps は 1 本だけ。callback なし / v=weekly / places を付与 -->
+    <%= javascript_include_tag(
+          "https://maps.googleapis.com/maps/api/js?key=#{ENV.fetch("GOOGLE_MAPS_API_KEY")}&libraries=places&v=weekly",
+          defer: true
+        ) %>
   </head>
 
   <body>
