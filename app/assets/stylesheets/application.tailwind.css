@@ -1,1 +1,23 @@
 @import "tailwindcss";
+
+.search-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  height: 100vh;
+  background: #fff;
+  overflow-y: auto;
+  border-left: 1px solid #ccc;
+  transition: transform 0.3s ease;
+  width: 100vw;
+  max-width: 420px;
+}
+.search-panel.hidden {
+  transform: translateX(100%);
+}
+.search-panel.show {
+  transform: translateX(0);
+}
+#results-list > li + li {
+  border-top: 1px solid rgba(0,0,0,0.01);
+}

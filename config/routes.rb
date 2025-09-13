@@ -1,8 +1,14 @@
 Rails.application.routes.draw do
+  root "pins#index"
+
   devise_for :users, controllers: { registrations: "users/registrations" }
   resource :profile, only: [ :new, :create, :edit, :update ]
-  resources :posts
-  root "posts#index"
+  resources :pins do
+    collection { get :check }
+  end
+  resources :posts do
+    collection { get :count_by_place }
+  end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
