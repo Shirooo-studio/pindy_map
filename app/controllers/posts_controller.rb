@@ -57,6 +57,13 @@ class PostsController < ApplicationController
     end
   end
 
+  # GET /posts/count_by_place?place_ids=aaa,bbb
+  def count_by_place
+    ids = params[:place_ids].to_s.split(",").map(&:strip).reject(&:blank?).uniq.first(100)
+    counts = ids.empty? ? {} : Post.where(place_id: ids).group(:place_id).count
+    render json: counts
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_post
