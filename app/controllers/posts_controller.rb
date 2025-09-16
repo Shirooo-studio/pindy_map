@@ -64,6 +64,28 @@ class PostsController < ApplicationController
     render json: counts
   end
 
+  # GET /posts_by_place?place_id=ChIJxxx
+  def by_place
+    pid = params[:place_id].to_s
+    return render json: [] if pid.blank?
+
+    # いまのschemaでも動く最小形（title しか無くてもOK）
+    # 将来、Postに user / body / image_url / tags が生えたら .select を拡張してください
+    posts = Post.where(place_id: pid).order(created_at: :desc)
+
+    render json: posts.map { |p|
+      {
+        id: p.id,
+        title: p.title.to_s,
+        body: p.try(:body).to_s,
+        image_url: p.try(:image_url).to_s,
+        user_name: p.try(:user)&.username || "アカウント名",
+        user_avatar_url: p.try(:user)&.avatar_url.to_s,
+        tags: []
+      }
+    }
+  end
+
   private
     # Use callbacks to share common setup or constraints between actions.
     def set_post
