@@ -28,10 +28,15 @@ class PinsController < ApplicationController
   # POST /pins
   def create
     @pin = current_user ? current_user.pins.new(pin_params) : Pin.new(pin_params)
-    if @pin.save
-      redirect_to @pin, notice: "Pin was successfully created."
-    else
-      render :new, status: :unprocessable_entity
+
+    respond_to do |f|
+      if @pin.save
+        f.html { redirect_to @pin, notice: "Pin was successfully created." }
+        f.json { render json:@pin.slice(:id, :name, :place_id), status: :created }
+      else
+        f.html { render :new, status: :unprocessable_entity }
+        f.json { render json:@pin.errors, status: :unprocessable_entity }
+      end
     end
   end
 

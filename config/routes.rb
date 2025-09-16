@@ -7,7 +7,7 @@ Rails.application.routes.draw do
     collection { get :check }
   end
   resources :posts do
-    collection { get :count_by_place }
+    collection { get :count_by_place, :by_place }
   end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
