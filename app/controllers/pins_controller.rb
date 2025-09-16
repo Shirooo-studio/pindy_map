@@ -32,10 +32,10 @@ class PinsController < ApplicationController
     respond_to do |f|
       if @pin.save
         f.html { redirect_to @pin, notice: "Pin was successfully created." }
-        f.json { render json:@pin.slice(:id, :name, :place_id), status: :created }
+        f.json { render json: @pin.slice(:id, :name, :place_id), status: :created }
       else
         f.html { render :new, status: :unprocessable_entity }
-        f.json { render json:@pin.errors, status: :unprocessable_entity }
+        f.json { render json: @pin.errors, status: :unprocessable_entity }
       end
     end
   end
