@@ -13,14 +13,14 @@ class NormalizePinsForPlaces < ActiveRecord::Migration[7.2]
       change_column :pins, :longitude, :decimal, precision: 10, scale: 6, using: "longitude::decimal"
     end
 
-    #3) visibility のデフォルトと NOT NULL を確定（NULL は 1 に埋める）
+    # 3) visibility のデフォルトと NOT NULL を確定（NULL は 1 に埋める）
     execute "UPDATE pins SET visibility = 1 WHERE visibility IS NULL"
     change_column_default :pins, :visibility, from: nil, to: 1
     change_column_null :pins, :visibility, false
 
-    #4) インデックス（重複防止：user_id x google_place_id）
-    unless index_exists?(:pins, [:user_id, :google_place_id], name: "idx_pins_user_place_unique")
-      add_index :pins, [:user_id, :google_place_id],
+    # 4) インデックス（重複防止：user_id x google_place_id）
+    unless index_exists?(:pins, [ :user_id, :google_place_id ], name: "idx_pins_user_place_unique")
+      add_index :pins, [ :user_id, :google_place_id ],
         unique: true,
         where: "google_place_id IS NOT NULL",
         name: "idx_pins_user_place_unique"
@@ -28,14 +28,14 @@ class NormalizePinsForPlaces < ActiveRecord::Migration[7.2]
 
     # 参考：検索最適化用の補助インデックス（任意）
     add_index :pins, :google_place_id unless index_exists?(:pins, :google_place_id)
-    add_index :pins, [:latitude, :longitude] unless index_exists?(:pins, [:latitude, :longitude])
+    add_index :pins, [ :latitude, :longitude ] unless index_exists?(:pins, [ :latitude, :longitude ])
   end
 
   def down
     # 補助インデックス削除
     remove_index :pins, name: "idx_pins_user_place_unique" if index_exists?(:pins, name: "idx_pins_user_place_unique")
     remove_index :pins, column: :google_place_id if index_exists?(:pins, :google_place_id)
-    remove_index :pins, column: [:latitude, :longitude] if index_exists?(:pins, [:latitude, :longitude])
+    remove_index :pins, column: [ :latitude, :longitude ] if index_exists?(:pins, [ :latitude, :longitude ])
 
     # visibility 制約を元に戻す
     change_column_null :pins, :visibility, true
