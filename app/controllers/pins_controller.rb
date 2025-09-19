@@ -1,6 +1,6 @@
 class PinsController < ApplicationController
   before_action :set_pin, only: %i[ show edit update destroy ]
-  before_action :authenticate_user!, only: :check
+  before_action :authenticate_user!, only: %i[ create update destroy check ]
 
   # GET /pins or /pins.json
   def index
@@ -27,15 +27,27 @@ class PinsController < ApplicationController
 
   # POST /pins
   def create
-    @pin = current_user ? current_user.pins.new(pin_params) : Pin.new(pin_params)
+    # 同一ユーザー x 同一 google_place_id の重複防止
+    place_id = pin_params[:google_place_id].presence
+    if place_id
+      if (existing = Pin.find_by(user_id: current_user.id, google_place_id: place_id))
+        return respond_to do |f|
+          f.html { redirect_to existing, notice: "すでに保存済みのピンです。" }
+          f.json { render json: serialize_pin(existing), status: :ok }
+        end
+      end
+    end
+
+    @pin = current_user.pins.new(pin_params)
+    @pin.visibility ||= :company_only
 
     respond_to do |f|
       if @pin.save
         f.html { redirect_to @pin, notice: "Pin was successfully created." }
-        f.json { render json: @pin.slice(:id, :name, :place_id), status: :created }
+        f.json { render json: serialize_pin(@pin), status: :created }
       else
         f.html { render :new, status: :unprocessable_entity }
-        f.json { render json: @pin.errors, status: :unprocessable_entity }
+        f.json { render json: { errors: @pin.errors.full_messages }, status: :unprocessable_entity }
       end
     end
   end
@@ -57,10 +69,14 @@ class PinsController < ApplicationController
 
   # GET /pins/check?place_ids=aaa,bbb
   def check
-    ids = params[:place_ids].to_s.split(",").map(&:strip).reject(&:blank?)
-    # ログインユーザー保存済み（place_id 一致）
-    saved = Pin.where(user_id: current_user.id, place_id: ids).pluck(:place_id)
-    render json: saved.index_with { true }
+    ids_param = params[:google_place_ids].presence || params[:place_ids].presence
+    ids = ids_param.to_s.split(",").map(&:strip).reject(&:blank?)
+    saved = if ids.any?
+      Pin.where(user_id: current_user.id, google_place_id: ids).pluck(:google_place_id)
+    else
+      []
+    end
+    render json: saved.index_with(true)
   end
 
   private
@@ -71,6 +87,19 @@ class PinsController < ApplicationController
 
     # Only allow a list of trusted parameters through.
     def pin_params
-      params.require(:pin).permit(:name, :address, :place_id, :latitude, :longitude, :category, :visibility, :user_id)
+      params.require(:pin).permit(:name, :address, :google_place_id, :latitude, :longitude, :visibility)
+    end
+
+    # JSON返却を統一
+    def serialize_pin(pin)
+      {
+        id: pin.id,
+        name: pin.name,
+        address: pin.address,
+        latitude: pin.latitude.to_f,
+        longitude: pin.longitude.to_f,
+        visibility: pin.visibility,
+        google_place_id: pin.google_place_id
+      }
     end
 end
