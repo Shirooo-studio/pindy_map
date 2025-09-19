@@ -1,0 +1,7 @@
+ja:
+  emuns:
+    pin:
+      visibility:
+        everyone: 一般公開
+        company_only: 会社内公開
+        private_: 非公開

@@ -10,20 +10,23 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema[7.2].define(version: 2025_09_12_131941) do
+ActiveRecord::Schema[7.2].define(version: 2025_09_18_143441) do
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
 
   create_table "pins", force: :cascade do |t|
     t.string "name"
     t.string "address"
-    t.string "place_id"
-    t.float "latitude"
-    t.float "longitude"
-    t.integer "visibility"
+    t.string "google_place_id"
+    t.decimal "latitude", precision: 10, scale: 6
+    t.decimal "longitude", precision: 10, scale: 6
+    t.integer "visibility", default: 1, null: false
     t.bigint "user_id", null: false
     t.datetime "created_at", null: false
     t.datetime "updated_at", null: false
+    t.index ["google_place_id"], name: "index_pins_on_google_place_id"
+    t.index ["latitude", "longitude"], name: "index_pins_on_latitude_and_longitude"
+    t.index ["user_id", "google_place_id"], name: "idx_pins_user_place_unique", unique: true, where: "(google_place_id IS NOT NULL)"
     t.index ["user_id"], name: "index_pins_on_user_id"
   end
 
@@ -35,6 +38,7 @@ ActiveRecord::Schema[7.2].define(version: 2025_09_12_131941) do
     t.float "longitude"
     t.string "place_id"
     t.string "address"
+    t.index ["place_id"], name: "index_posts_on_place_id"
   end
 
   create_table "users", force: :cascade do |t|

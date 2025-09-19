@@ -312,18 +312,18 @@ function showPlaceDetails(placeId){
     </div>
 
     <div class="mt-2 border-t">
-      <div class="pm-actions">
-        <div>
+      <div class="pm-actions grid grid-cols-3 text-center select-none">
+        <div id="action-pin" class="pm-action cursor-pointer px-2 py-2 rounded hover:bg-gray-100 transition">
           <div class="text-xl">📍</div>
-          <div>ピンをする</div>
+          <div class="label text-sm">ピンをする</div>
         </div>
-        <div>
+        <div id="action-post" class="pm-action cursor-pointer px-2 py-2 rounded hover:bg-gray-100 transition">
           <div class="text-xl">➕</div>
-          <div>投稿する</div>
+          <div class="text-sm">投稿する</div>
         </div>
-        <div>
+        <div id="action-share" class="pm-action cursor-pointer px-2 py-2 rounded hover:bg-gray-100 transition">
           <div class="text-xl">🔗</div>
-          <div>共有する</div>
+          <div class="text-sm">共有する</div>
         </div>
       </div>
       <div class="px-3 pb-2 flex gap-2">
@@ -379,22 +379,63 @@ function showPlaceDetails(placeId){
       })
       .catch(() => { renderPlacePosts([]); renderPlaceMedia([]); });
 
-    // まずは保存すみかチェックしてボタンを出し分け
+    // 保存済みかチェック → 📍タイルの状態を切り替え
+    const actionPin = document.getElementById("action-pin");
+    const savedBadge = document.getElementById("saved-badge");
+
+    function updatePinActionUI(isSaved) {
+      if (!actionPin) return;
+      const label = actionPin.querySelector(".label");
+      if (isSaved) {
+        label && (label.textContent = "保存済み");
+        actionPin.classList.add("opacity-60", "pointer-events-none");
+        savedBadge?.classList.remove("hidden");
+      } else {
+        label && (label.textContent = "ピンをする");
+        actionPin.classList.remove("opacity-60", "pointer-events-none");
+        savedBadge?.classList.add("hidden");
+      }
+    }
+
+    function reflectListBadge(pid) {
+      const list = document.getElementById("results-list");
+      if (!list) return;
+
+      //data-place-id を持つ li を走査して一致する要素を探す
+      const li = Array.from(list.querySelectorAll("li"))
+        .find(el => el.dataset.placeId === String(pid));
+        if(!li) return;
+
+      const slot = li.querySelector(".saved-badge-slot");
+      if (!slot || slot.querySelector(".saved-badge")) return;
+
+      const b = document.createElement("span");
+      b.className = "saved-badge ml-2 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded";
+      b.textContent = "保存済み（あなたのピン）";
+      slot.appendChild(b);
+    }
+
     fetch(`/pins/check?place_ids=${encodeURIComponent(place.place_id)}`, { headers: { "Accept":"application/json" } })
       .then(r => r.ok ? r.json() : {})
       .then(saved => {
         const isSaved = !!saved[place.place_id];
-        const saveBtn = document.getElementById("save-pin-btn");
-        const savedBadge = document.getElementById("saved-badge");
-        if (isSaved) {
-          // 保存済み → ボタンを隠す／バッジを出す
-          saveBtn?.classList.add("hidden");
-          savedBadge.classList.remove("hidden");
-        } else {
-          // 未保存 → ボタンを出す&クリックで保存
-          saveBtn?.classList.remove("hidden");
-          savedBadge?.classList.add("hidden");
-          saveBtn.onclick = () => savePinFromPlace(place);
+        updatePinActionUI(isSaved);
+        if (!isSaved && actionPin) {
+          actionPin.addEventListener("click", async () => {
+            // 押下 → 保存処理
+            const label = actionPin.querySelector(".label");
+            const prev = label?.textContent;
+            actionPin.classList.add("opacity-60", "pointer-events-none");
+            if (label) label.textContent = "保存中…";
+            try {
+              await savePinFromPlace(place); // 成功: UI反映
+              updatePinActionUI(true);
+              reflectListBadge(place.place_id);
+            } catch (e) {
+              alert("保存に失敗しました。" + (e?.message ? ` ${e.message}` : ""));
+              updatePinActionUI(false); // 戻す
+            }
+          }, { once: true });
         }
       })
       .catch(()=>{/* 未ログインなどは無視 */});
@@ -410,43 +451,38 @@ function csrfToken() {
 }
 
 // Place から Pin を作成（保存）
-function savePinFromPlace(place) {
+async function savePinFromPlace(place) {
   const payload = {
     pin: {
       name: place.name ?? "",
       address: place.formatted_address ?? "",
-      place_id: place.place_id,
+      google_place_id: place.place_id,
       latitude: place.geometry?.location?.lat() ?? null,
       longitude: place.geometry?.location?.lng() ?? null,
-      visibility: "visibility_public" // デフォルトの公開範囲
+      visibility: "company_only" // enumに合わせる: everyone / company_only / private_
     }
   };
 
-  fetch("/pins.json", {
+  const res = await fetch("/pins.json", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
+      "Accept": "application/json",
       "X-CSRF-Token": csrfToken()
     },
+    credentials: "same-origin",
     body: JSON.stringify(payload)
   })
-  .then(res => res.ok ? res.json() : Promise.reject(res))
-  .then(() => {
-    // 保存UI更新
-    const btn = document.getElementById("save-pin-btn");
-    const badge = document.getElementById("saved-badge");
-    btn?.classList.add("hidden");
-    badge?.classList.remove("hidden");
-  })
-  .catch(async (res) => {
-    if (res.status === 401) {
-      alert("保存するにはログインが必要です。");
-      return;
-    }
-    let msg = "保存に失敗しました。";
-    try { msg += " " + JSON.stringify(await res.json()); } catch(_){}
-    alert(msg);
-  });
+
+  // 本文がからの可能性も考慮してパース
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+
+  if (!res.ok) {
+    const msg = data?.errors?.join(", ") || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data?.pin ?? data; // {pin; {...}} 形式にも対応
 }
 
 // 「この場所の投稿」をカードで描画
