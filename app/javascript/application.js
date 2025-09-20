@@ -348,6 +348,11 @@ function showPlaceDetails(placeId){
     </div>
     `;
 
+    const actionPost = document.getElementById("action-post");
+    if (actionPost) {
+      actionPost.addEventListener("click", () => openPostOverlay(place));
+    }
+
     // 浮遊xボタンで閉じる
     document.getElementById("detail-close-fab")?.addEventListener("click", closeDetail);
 
@@ -505,10 +510,27 @@ function renderPlacePosts(posts) {
         `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#e5e7eb"/></svg>`
       );
     const userName = p.user_name || "アカウント名";
-    const hero = p.image_url ||
-      "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="100%" height="100%" fill="#f3f4f6"/></svg>`
-      );
+
+    const first = (p.media || [])[0];
+    let heroHtml = `
+      <div class="w-full bg-gray-50">
+        <div class="w-full h-48 bg-gray-100"></div>
+      </div>`;
+    if (first) {
+      if (first.type === "image") {
+        heroHtml = `
+          <div class="w-full bg-gray-50">
+            <img src="${first.url}" alt="" class="w-full h-48 object-cover">
+          </div>`;
+      } else {
+        const posterAttr = first.poster ? ` poster="${first.poster}"` : "";
+        heroHtml = `
+          <div class="w-full bg-gray-50">
+            <video src="${first.url}"${posterAttr} class="w-full h-48 object-cover" muted preload="metadata"></video>
+          </div>`;
+      }
+    }
+
     const title = p.title || "";
     const excerpt = (p.body || "").replace(/\s+/g, " ");
     const tags = Array.isArray(p.tags) ? p.tags : [];
@@ -524,9 +546,7 @@ function renderPlacePosts(posts) {
           <span class="text-sm text-gray-700">${userName}</span>
         </div>
 
-        <div class="w-full bg-gray-50">
-          <img src="${hero}" alt="" class="w-full h-48 object-cover">
-        </div>
+        ${heroHtml}
 
         <div class="px-3 py-2">
           <div class="flex items-center gap-3 mb-2">
@@ -554,25 +574,35 @@ function renderPlaceMedia(posts) {
   if (!wrap) return;
   wrap.innerHTML = "";
 
-  // posts[].image_url を集めて並べる（将来、複数画像対応するなら配列化）
-  const images = (posts || [])
-    .map(p => p.image_url)
-    .filter(Boolean);
+  const items = (posts || []).flatMap(p => {
+    const arr = Array.isArray(p.media) ? p.media : [];
+    return arr.map(m => ({ type: m.type, url: m.url, poster:m.poster }));
+  });
 
-  if (images.length === 0) {
+  if (items.length === 0) {
     const note = document.createElement("div");
     note.className = "text-sm text-gray-500";
-    note.textContent = "この場所の画像はまだありません。";
+    note.textContent = "この場所の画像・動画はまだありません。";
     wrap.appendChild(note);
     return;
   }
 
-  images.forEach(url => {
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = "";
-    img.className = "pm-thumb";
-    wrap.appendChild(img);
+  items.forEach(it => {
+    if (it.type === "image") {
+      const img = document.createElement("img");
+      img.src = it.url;
+      img.alt = "";
+      img.className = "pm-thumb";
+      wrap.appendChild(img);
+    } else {
+      const v = document.createElement("video");
+      v.src = it.url;
+      if (it.poster) v.poster = it.poster;
+      v.controls = true;
+      v.preload = "metadata";
+      v.className = "pm-thumb";
+      wrap.appendChild(v);
+    }
   });
 }
 
@@ -607,5 +637,149 @@ function focusPlaceWithRightUIOffset(latLng) {
 
     // delta が極端に小さければ何もしない
     if (delta > 4) map.panBy(Math.round(delta), 0);
+  });
+}
+
+function closePostOverlay() {
+  const overlay = document.getElementById("post-overlay");
+  if(!overlay) return;
+  overlay.classList.add("hidden");
+  overlay.innerHTML = ""; // 掃除
+  // 背面スクロール復帰
+  document.body.style.overflow = "";
+}
+
+async function submitPostForm(formData) {
+  const res = await fetch("/posts.json", {
+    method: "POST",
+    headers: {
+      "X-CSRF-Token": csrfToken(),
+      "Accept": "application/json"
+    },
+    body: formData,
+    credentials: "same-origin"
+  });
+
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+
+  if (!res.ok) {
+    const msg = data?.errors?.join("\n") || `HTTP ${res.status}`;
+    throw new Error(msg);
+  }
+  return data;
+}
+
+function openPostOverlay(place) {
+  const overlay = document.getElementById("post-overlay");
+  if (!overlay) return;
+
+  // 背景（白(0%）+フォームカード（中央寄せフルサイズ寄り）
+  overlay.innerHTML = `
+  <div class="absolute inset-0 bg-white/80"></div>
+  <div class="relative w-full h-full flex items-center justify-center p-4">
+    <div class="bg-white w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl shadow-xl p-5 relative">
+      <button id="post-overlay-close" class="absolute top-3 right-3 text-gray-500 hover:text-black text-xl" aria-label="閉じる">✕</button>
+
+      <h2 class="text-lg font-semibold mb-4">投稿する</h2>
+      <form id="post-form" class="space-y-3">
+        <input type="hidden" name="post[google_place_id]" value="${place.place_id}">
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">投稿本文</label>
+          <textarea name="post[body]" rows="5" class="w-full border rounded-lg p-2" placeholder="本文を入力..."></textarea>
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">タグ（カンマ区切り）</label>
+          <input type="text" name="post[tag_list]" class="w-full border rounded-lg p-2" placeholder="例：ランチ, 個室, 接待">
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">公開範囲</label>
+          <select name="post[visibility]" class="w-full border rounded-lg p-2">
+            <option value="everyone">全員に公開</option>
+            <option value="company_only" selected>会社内のみ</option>
+            <option value="private_">非公開</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm text-gray-600 mb-1">画像・動画</label>
+          <input type="file" name="post[media][]" accept="image/*,video/*" multiple class="block w-full border rounded-lg p-2">
+          <p class="text-xs text-gray-500 mt-1">画像・動画をアップロードできます（合計10個まで）</p>
+        </div>
+
+        <div id="post-form-error" class="text-sm text-red-600 hidden"></div>
+
+        <div class="pt-2 flex gap-2">
+          <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white">投稿する</button>
+          <button type="button" id="post-form-cancel" class="px-4 py-2 rounded-lg border">キャンセル</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  `;
+  overlay.classList.remove("hidden");
+  // 背面スクロール抑止
+  document.body.style.overflow = "hidden";
+
+  // 閉じる動作
+  overlay.querySelector("#post-overlay-close")?.addEventListener("click", closePostOverlay);
+  overlay.querySelector("#post-form-cancel")?.addEventListener("click", closePostOverlay);
+  overlay.addEventListener("click", (e) => {
+    // 外部クリックで閉じる（カードないクリックは無視）
+    const card = overlay.querySelector("form")?.parentElement;
+    if (card && !card.contains(e.target)) closePostOverlay();
+  });
+  document.addEventListener("keydown", escCloseOnce);
+
+  function escCloseOnce(ev) {
+    if (ev.key === "Escape") {
+      closePostOverlay();
+      document.removeEventListener("keydown", escCloseOnce);
+    }
+  }
+
+  // 送信
+  const form = overlay.querySelector("#post-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = overlay.querySelector("#post-form-error");
+    err?.classList.add("hidden");
+    err.textContent = "";
+
+    const fd = new FormData(form);
+
+    // UX: 二重送信防止
+    const submitBtn = form.querySelector('button[type="submit"]');
+    const prevTxt = submitBtn.textContent;
+    submitBtn.disabled = true;
+    submitBtn.textContent = "投稿中...";
+
+    const files = form.querySelector('input[name="post[media][]"]').files;
+    if (files.length > 10) {
+      err.textContent = "画像・動画は合計10個までです。";
+      err.classList.remove("hidden");
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevTxt;
+      return;
+    }
+
+    try {
+      await submitPostForm(fd);
+      closePostOverlay();
+      // 成功後：現在の place の投稿一覧をリロード
+      fetch(`/posts/by_place?place_id=${encodeURIComponent(place.place_id)}`, { headers: { "Accept":"application/json" }})
+        .then(r => r.ok ? r.json() : [])
+        .then((posts) => { renderPlacePosts(posts); renderPlaceMedia(posts); })
+        .catch(() => {});
+    } catch (e) {
+      err.textContent = e.message || "投稿に失敗しました。";
+      err.classList.remove("hidden");
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = prevTxt;
+    }
   });
 }
