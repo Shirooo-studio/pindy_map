@@ -10,11 +10,11 @@ Rails.application.routes.draw do
     collection { get :count_by_place, :by_place }
   end
 
-  get "/me", to:"mypage#show"
+  get "/me", to: "mypage#show"
   get "/me/pins", to: "mypage#pins"
   get "/me/posts", to: "mypage#posts"
 
-  resource :profile, only: [:show, :update]
+  resource :profile, only: [ :show, :update ]
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

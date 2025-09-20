@@ -1,6 +1,6 @@
 class PostsController < ApplicationController
-  before_action :authenticate_user!, only: [:create]
-  before_action :set_post, only: [:show, :edit, :update, :destroy]
+  before_action :authenticate_user!, only: [ :create ]
+  before_action :set_post, only: [ :show, :edit, :update, :destroy ]
 
   # GET /posts/by_place?place_id=ChIJ...
   def by_place
@@ -36,7 +36,7 @@ class PostsController < ApplicationController
             {
               type: "video",
               url: url_for(att),
-              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640, 360]).processed) : nil)
+              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [ 640, 360 ]).processed) : nil)
             }
           else
             {
@@ -89,11 +89,11 @@ class PostsController < ApplicationController
   # POST /posts or /posts.json
   def create
     place_id = post_params[:google_place_id].presence
-    return render json: { errors: ["google_place_id が指定されていません"] }, status: :unprocessable_entity if place_id.blank?
+    return render json: { errors: [ "google_place_id が指定されていません" ] }, status: :unprocessable_entity if place_id.blank?
 
     if Post.column_names.include?("pin_id")
       pin = Pin.find_by(google_place_id: place_id)
-      return render(json: { errors: ["この場所のピンが見つかりません。先に📍で保存してください"] }, status: :unprocessable_entity) unless pin
+      return render(json: { errors: [ "この場所のピンが見つかりません。先に📍で保存してください" ] }, status: :unprocessable_entity) unless pin
 
       post = current_user.posts.new(
         pin: pin,

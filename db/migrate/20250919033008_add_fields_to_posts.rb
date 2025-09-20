@@ -12,7 +12,7 @@ class AddFieldsToPosts < ActiveRecord::Migration[7.2]
     add_column :posts, :visibility, :integer, default: 1, null: false
 
     # 取得最適化（任意）
-    add_index :posts, [:pin_id, :created_at]
+    add_index :posts, [ :pin_id, :created_at ]
     add_index :posts, :user_id
   end
 end
