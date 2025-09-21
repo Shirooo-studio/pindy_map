@@ -2,7 +2,6 @@ Rails.application.routes.draw do
   root "pins#index"
 
   devise_for :users, controllers: { registrations: "users/registrations" }
-  resource :profile, only: [ :new, :create, :edit, :update ]
   resources :pins do
     collection { get :check }
   end
@@ -14,7 +13,7 @@ Rails.application.routes.draw do
   get "/me/pins", to: "mypage#pins"
   get "/me/posts", to: "mypage#posts"
 
-  resource :profile, only: [ :show, :update ]
+  resource :profile, only: [ :show, :new, :create, :edit, :update ]
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
