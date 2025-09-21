@@ -1,0 +1,51 @@
+<!-- 左サイド: 常時表示（PC想定）。必要に応じてmd:hidden等でレスポンシブ制御OK -->
+<aside id="app-leftbar" class="h-dvh w-[56px] md:w-[72px] shrink-0 border-r bg-white/80 backdrop-blur sticky top-0 z-30 flex flex-col items-center py-3 gap-3">
+
+  <!-- ハンバーガーメニュー（hoverでログアウトが出る） -->
+  <div class="relative group">
+    <button class="rb-item" title="メニュー">
+      <span class="text-2xl" aria-hidden="true">☰</span>
+      <span class="sr-only">メニュー</span>
+    </button>
+
+    <!-- ホバーでログアウト -->
+    <div class="absolute top-1/2 left-full -translate-y-1/2 hidden group-hover:block bg-white border rounded shadow-md w-28 z-50">
+      <ul class="flex flex-col py-2 text-sm text-gray-700">
+        <li>
+        <%= link_to "ログアウト",
+                    destroy_user_session_path,
+                    method: :delete,
+                    data: { turbo_method: :delete, turbo_confirm: "ログアウトしますか？" },
+                    class: "block px-4 py-2 text-red-600 hover:bg-red-50" %>
+        </li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- ピン（地図で表す） -->
+  <%= link_to root_path,
+              class: "rb-item #{nav_active_class(root_path)}",
+              title: "ピンを探す",
+              "aria-current": (current_page?(root_path) ? "page" : nil) do %>
+    <span class="text-xl" aria-hidden="true">📍</span>
+    <span class="sr-only">ピンを探す</span>
+    <% end %>
+
+    <!-- ポスト（投稿を探す）: 一覧ページに合わせて変更 -->
+    <%= link_to posts_path,
+                class: "rb-item #{nav_active_class(posts_path)}",
+                title: "ポストを探す",
+                "aria-current": (current_page?(posts_path) ? "page" : nil) do %>
+      <span class="text-xl" aria-hidden="true">📝</span>
+      <span class="sr-only">ポストを探す</span>
+    <% end %>
+
+    <!-- マイアカウント -->
+    <%= link_to "/me",
+                class: "rb-item #{nav_active_class('/me')}",
+                title: "マイアカウント",
+                "aria-current": (request.path == '/me' ? "page" : nil) do %>
+      <span class="text-xl" aria-hidden="true">👤</span>
+      <span class="sr-only">マイアカウント</span>
+    <% end %>
+</aside>

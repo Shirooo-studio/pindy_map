@@ -165,3 +165,7 @@ body.panel-open .detail-popup {
 .detail-section {
   padding: 12px 14px 14px;
 }
+
+.rb-item{ @apply p-2 rounded flex items-center justify-center w-10 h-10; }
+.rb-item.is-active{ @apply bg-blue-50 text-blue-600; }
+.rb-item:not(.is-active){ @apply text-gray-700 hover:bg-gray-100; }

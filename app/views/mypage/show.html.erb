@@ -1,0 +1,29 @@
+<div id="map-container" class="relative w-full h-[calc(100dvh-0px)]">
+  <!-- 地図 -->
+  <div id="map" class="absolute inset-0"></div>
+
+  <!-- 右パネル：検索パネルと同じCSSを再利用するため id=search-panel を採用 -->
+  <aside id="search-panel" class="search-panel show" aria-label="マイページパネル">
+    <div id="me-panel" class="p-3 space-y-3">
+      <h1 class="text-lg font-semibold">マイページ</h1>
+
+      <!-- プロフィールカード -->
+      <section class="bg-white border rounded-lg p-3">
+        <div class="text-sm text-gray-600">アカウント</div>
+        <div class="mt-1">
+          <div><span class="text-gray-500 text-sm">ユーザー名</span>：<span id="pf-username">-</span></div>
+          <div><span class="text-gray-500 text-sm">表示名</span>：<span id="pf-display-name">-</span></div>
+          <div><span class="text-gray-500 text-sm">会社</span>：<span id="pf-company">-</span></div>
+          <div><span class="text-gray-500 text-sm">部署</span>：<span id="pf-dept">-</span></div>
+          <div class="mt-1"><span class="text-gray-500 text-sm">自己紹介</span>：<span id="pf-bio">-</span></div>
+
+          <div class="mt-2">
+            <button id="profile-edit-btn" class="px-3 py1.5 rounded border hover:bg-gray-50 text-sm">
+              プロフィールを編集
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </aside>
+</div>

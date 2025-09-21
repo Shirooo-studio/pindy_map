@@ -25,9 +25,17 @@
   </head>
 
   <body>
-      <%= yield %>
+    <div id="post-overlay" class="fixed inset-0 z-[9999] hidden"></div>
 
-      <!-- 投稿フォームのオーバーレイ（全画面に被せる） -->
-      <div id="post-overlay" class="fixed inset-0 z-60 hidden"></div>
+    <div id="app-shell" class="min-h-dvh flex">
+    <% if user_signed_in? && !(controller_name == "profiles" && action_name == "new") %>
+      <%= render "shared/left_sidebar" %>
+    <% end %>
+
+      <!-- メインコンテンツ -->
+      <main id="app-main" class="flex-1 min-w-0">
+        <%= yield %>
+      </main>
+    </div>
   </body>
 </html>

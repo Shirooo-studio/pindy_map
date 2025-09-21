@@ -627,16 +627,19 @@ function focusPlaceWithRightUIOffset(latLng) {
     const detailW = detail?.getBoundingClientRect().width || 360; // だいたいの最小想定
 
     // 右側UIの総占有幅
+    const sidebar = document.getElementById("app-leftbar");
+    const sidebarW = sidebar?.getBoundingClientRect().width || 72;
     const rightUI = spw + gap + detailW + gap;
+    const totalTaken = sidebarW + rightUI;
 
     // 左側に残っている「空き領域」の中央にピンを置きたい
-    const leftFree = Math.max(0, mapW - rightUI);
-    const targetX = leftFree / 2;        // 目標のピンのX座標
+    const leftFree = Math.max(0, mapW - totalTaken);
+    const targetX = sidebarW + (leftFree / 2);        // 目標のピンのX座標
     const currentX = mapW / 2;           // いまは画面中央
     const delta = currentX - targetX;    // 左へ動かしたい量（px）
 
     // delta が極端に小さければ何もしない
-    if (delta > 4) map.panBy(Math.round(delta), 0);
+    if (Math.abs(delta) > 4) map.panBy(Math.round(delta), 0);
   });
 }
 
@@ -782,4 +785,202 @@ function openPostOverlay(place) {
       submitBtn.textContent = prevTxt;
     }
   });
+}
+
+document.addEventListener("turbo:load", () => {
+  const mePanel = document.getElementById("me-panel");
+  if (!mePanel) return;
+
+  // 右パネルを開いて幅・オフセットを反映
+  openPanel();
+
+  // プロフィール読み込み
+  loadMyProfile();
+
+  // プロフィール編集
+  document.getElementById("profile-edit-btn")?.addEventListener("click", openProfileEditOverlay);
+});
+
+function activateMyTab(tab) {
+  const map = {
+    pins: "tab-pins",
+    posts: "tab-posts",
+    account: "tab-account",
+  };
+  Object.values(map).forEach(id => document.getElementById(id)?.classList.add("hidden"));
+  document.getElementById(map[tab])?.classList.remove("hidden");
+}
+
+async function loadMyPins() {
+  const ul = document.getElementById("my-pins");
+  if (!ul) return;
+  ul.innerHTML = `<li class="text-sm text-gray-500">読み込み中...</li>`;
+  try {
+    const res = await fetch("/me/pins", {  headers: { "Accept": "application/json" }});
+    const pins = await res.json();
+    ul.innerHTML = "";
+    if (pins.length === 0) {
+      ul.innerHTML = `<li class="text-sm text-gray-500">ピンはまだありません。</li>`;
+      return;
+    }
+    pins.forEach(p => {
+      const li = document.createElement("li");
+      li.className = "flex items-center justify-between bg-white border rounded-lg p-3";
+      li.innerHTML = `
+        <div>
+          <div class="font-medium">${p.name ?? ""}</div>
+          <div class="text-sm text-gray-600">${p.address ?? ""}</div>
+          <div class="text-xs text-gray-500 mt-1">投稿数：${p.posts_count || 0}</div>
+        </div>
+        <a class="text-blue-600 hover:underline text-sm"
+        href="https://www.google.com/maps/search/?api=1&query=&query_place_id=${p.google_place_id}"
+        target="_blank" rel="noopener">地図で見る</a>
+      `;
+      ul.appendChild(li);
+    });
+  } catch(_) {
+    ul.innerHTML = `<li class="text-sm text-red-600">読み込みに失敗しました。</li>`;
+  }
+}
+
+async function loadMyPosts() {
+  const ul = document.getElementById("my-posts");
+  if (!ul) return;
+  ul.innerHTML = `<li class="text-sm text-gray-500">読み込み中...</li>`;
+  try {
+    const res = await fetch("/me/posts", { headers: { "Accept": "application/json" }});
+    const posts = await res.json();
+    ul.innerHTML = "";
+    if (!posts.length) {
+      ul.innerHTML = `<li class="text-sm text-gray-500">投稿はまだありません。</li>`;
+      return;
+    }
+    // 既存のカードUIと同じ見た目で1枚ずつ
+    posts.forEach(p => {
+      const first = (p.media || [])[0];
+      let hero = `<div class="w-full h-48 bg-gray-100"></div>`;
+      if (first) {
+        hero = first.type === "image"
+          ? `<img src="${first.url}" class="w-full h-48 object-cover">`
+          : `<video src="${first.url}" ${first.poster ? `poster="${first.poster}"` : ""} class="w-full h-48 object-cover" muted controls preload="metadata"></video>`;
+      }
+      const li = document.createElement("li");
+      li.className = "bg-white rounded-lg border overflow-hidden";
+      li.innerHTML =`
+        <div class="w-full bg-gray-50">${hero}</div>
+        <div class="px-3 py-2">
+          <div class="text-sm text-gray-900 font-medium mb-1">${p.title || ""}</div>
+          <div class="text-sm text-gray-700 leading-relaxed">
+            ${(p.body || "").replace(/\s+/g," ").slice(0,80)}${(p.body||"").length>80?"…":""}
+          </div>
+          <div class="mt-1">
+            <a href="/posts/${p.id}" class="text-xs text-gray-500 hover:underline">続きを読む</a>
+          </div>
+        </div>
+      `;
+      ul.appendChild(li);
+    });
+  } catch(_) {
+    ul.innerHTML = `<li class="text-sm text-red-600">読み込みに失敗しました。</li>`;
+  }
+}
+
+async function loadMyProfile() {
+  try {
+    const res = await fetch("/profile", { headers: { "Accept": "application/json" }});
+    const p = await res.json();
+    setText("#pf-username", p.username);
+    setText("#pf-display-name", p.display_name);
+    setText("#pf-company", p.company);
+    setText("#pf-dept", p.department);
+    setText("#pf-bio", p.bio);
+  } catch(_) {}
+}
+function setText(sel, v){ const el=document.querySelector(sel); if(el) el.textContent = v || "-"; }
+
+// =====================
+// プロフィール編集 オーバーレイ
+// ※ 既存の #post-overlay を共用
+// =====================
+function openProfileEditOverlay() {
+  fetch("/profile", { headers: { "Accept": "application/json" }})
+    .then(r => r.json())
+    .then(p => {
+      const overlay = document.getElementById("post-overlay");
+      if (!overlay) return;
+      overlay.innerHTML = `
+        <div class="absolute inset-0 bg-white/80"></div>
+        <div class="relative w-full h-full flex items-center justify-center p-4">
+          <div class="bg-white w-full max-w-xl max-h-[90vh] overflow-auto rounded-2xl shadow-xl p-5 relative">
+            <button id="ov-close" class="absolute top-3 right-3 text-gray-500 hover:text-black text-xl" aria-label="閉じる">✕</button>
+            <h2 class="text-lg font-semibold mb-4">プロフィール編集</h2>
+            <form id="profile-form" class="space-y-3">
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">ユーザー名</label>
+                <input name="profile[username]" class="w-full border rounded-lg p-2" value="${p.username||""}">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">名前・ニックネーム</label>
+                <input name="profile[display_name]" class="w-full border rounded-lg p-2" value="${p.display_name||""}">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">会社名</label>
+                <input name="profile[company]" class="w-full border rounded-lg p-2" value="${p.company||""}">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">部署名</label>
+                <input name="profile[department]" class="w-full border rounded-lg p-2" value="${p.department||""}">
+              </div>
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">自己紹介</label>
+                <textarea name="profile[bio]" rows="4" class="w-full border rounded-lg p-2">${p.bio||""}</textarea>
+              </div>
+
+              <div id="profile-error" class="text-sm text-red-600 hidden"></div>
+
+              <div class="pt-2 flex gap-2">
+                <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white">保存</button>
+                <button type="button" id="profile-cancel" class="px-4 py-2 rounded-lg border">キャンセル</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      `;
+      overlay.classList.remove("hidden");
+      document.body.style.overflow = "hidden";
+
+      const close = () => { overlay.classList.add("hidden"); overlay.innerHTML=""; document.body.style.overflow=""; };
+      overlay.querySelector("#ov-close")?.addEventListener("click", close);
+      overlay.addEventListener("click", (e) => {
+        const card = overlay.querySelector("form")?.parentElement;
+        if (card && !card.contains(e.target)) close();
+      });
+
+      const form = overlay.querySelector("#profile-form");
+      form.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const err = overlay.querySelector("#profile-error");
+        err.classList.add("hidden"); err.textContent = "";
+        const fd = new FormData(form);
+
+        const btn = form.querySelector('button[type="submit"]');
+        const prev = btn.textContent; btn.disabled=true; btn.textContent="保存中...";
+        try {
+          const res = await fetch("/profile", {
+            method: "PATCH",
+            headers: { "X-CSRF-Token": csrfToken(), "Accept": "application/json" },
+            body: fd, credentials: "same-origin"
+          });
+          const data = await res.json().catch(()=>({}));
+          if (!res.ok) throw new Error((data && data.errors && data.errors.join("\n")) || `HTTP ${res.status}`);
+          close();
+          loadMyProfile();
+        } catch (e) {
+          err.textContent = e.message || "更新に失敗しました。";
+          err.classList.remove("hidden");
+        } finally {
+          btn.disabled=false; btn.textContent=prev;
+        }
+      });
+    });
 }
