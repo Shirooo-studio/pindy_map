@@ -29,12 +29,12 @@ class MypageController < ApplicationController
       {
         id: p.id,
         title: p.title.to_s,
-        body:p.body.to_s,
+        body: p.body.to_s,
         media: p.media.map { |att|
           ct = att.content_type.to_s
           if ct.start_with?("video/")
             { type: "video", url: url_for(att),
-              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640, 360]).processed) : nil) }
+              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [ 640, 360 ]).processed) : nil) }
           else
             { type: "image", url: url_for(att) }
           end

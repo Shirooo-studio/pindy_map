@@ -49,7 +49,7 @@ class ProfilesController < ApplicationController
 
       format.json do
         if @user.update(profile_params_json)
-          render json: { ok: true}
+          render json: { ok: true }
         else
           render json: { errors: @user.errors.full_messages }, status: :unprocessable_entity
         end

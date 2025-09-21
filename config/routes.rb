@@ -13,7 +13,7 @@ Rails.application.routes.draw do
   get "/me/pins", to: "mypage#pins"
   get "/me/posts", to: "mypage#posts"
 
-  resource :profile, only: [:show, :new, :create, :edit, :update]
+  resource :profile, only: [ :show, :new, :create, :edit, :update ]
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 
