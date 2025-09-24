@@ -1,10 +1,21 @@
 <% content_for :title, "Posts" %>
 
-<div id="map" style="height: 500px; width: 100%;"></div>
-<input id="pac-input" class="controls" type="text" placeholder="検索">
+<div id="map-container" class="relative">
+  <div id="map" class="h-screen w-full"></div>
 
-<div class="w-full">
-  <% if notice.present? %>
-    <p class="py-2 px-3 bg-green-50 mb-5 text-green-500 font-medium rounded-md inline-block" id="notice"><%= notice %></p>
-  <% end %>
+  <!-- 検索バー -->
+  <div id="search-bar" class="absolute left-52 top-3 bg-white rounded-full shadow px-4 py-2 w-[70vw] max-w-xl">
+    <input id="search-input" class="w-full outline-none" placeholder="キーワードで検索（例：カフェ 名駅）" />
+  </div>
+
+  <!-- 右スライドパネル -->
+  <aside id="search-panel" class="search-panel hidden">
+    <h2 class="p-3 font-bold border-b">検索結果</h2>
+    <ul id="results-list"></ul>
+  </aside>
+
+  <!-- ポップアップ型 詳細 -->
+  <div id="detail-panel" class="detail-popup hidden">
+    <div id="detail-body" class="p-0"></div>
+  </div>
 </div>

@@ -3,7 +3,7 @@
   <div id="map" class="absolute inset-0"></div>
 
   <!-- 右パネル：検索パネルと同じCSSを再利用するため id=search-panel を採用 -->
-  <aside id="search-panel" class="search-panel show" aria-label="マイページパネル">
+  <aside id="search-panel" class="search-panel hidden" aria-label="マイページパネル">
     <div id="me-panel" class="p-3 space-y-3">
 
       <!-- プロフィールカード -->
@@ -51,4 +51,8 @@
       </div>
     </div>
   </aside>
+
+  <div id="detail-panel" class="detail-popup hidden">
+    <div id="detail-body" class="p-0"></div>
+  </div>
 </div>

@@ -6,7 +6,7 @@ Rails.application.routes.draw do
     collection { get :check }
   end
   resources :posts do
-    collection { get :count_by_place, :by_place }
+    collection { get :by_place }
   end
 
   get "/me", to: "mypage#show"
