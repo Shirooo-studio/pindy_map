@@ -26,6 +26,7 @@
 
   <body>
     <div id="post-overlay" class="fixed inset-0 z-[9999] hidden"></div>
+    <div id="profile-overlay" class="fixed inset-0 z-[9999] hidden"></div>
 
     <div id="app-shell" class="min-h-dvh flex">
     <% if user_signed_in? && !(controller_name == "profiles" && action_name == "new") %>

@@ -5,13 +5,27 @@ class ProfilesController < ApplicationController
     respond_to do |format|
       format.json do
         u = current_user
+
+        avatar_url = u.avatar.attached? ? url_for(u.avatar) : nil
+        avatar_thumb_url = nil
+        if u.avatar.attached?
+          begin
+            avatar_thumb_url = url_for(u.avatar.variant(resize_to_fill: [96, 96]))
+          rescue => e
+            Rails.logger.warn("[profile] variant failed: #{e.class}: #{e.message}")
+            avatar_thumb_url = avatar_url
+          end
+        end
+
         render json: {
-          username: u.username,
-          display_name: u.try(:full_name),
-          company: u.try(:company),
-          department: u.try(:department),
-          work_location: u.try(:work_location),
-          bio: u.try(:bio)
+          username:      u.username,
+          display_name:  u.full_name.presence || u.username,
+          company:       u.company.to_s,
+          department:    u.department.to_s,
+          work_location: u.work_location.to_s,
+          bio:           u.bio.to_s,
+          avatar_url:    avatar_url,
+          avatar_thumb_url: avatar_thumb_url
         }
       end
       format.html { redirect_to edit_profile_path }
@@ -59,11 +73,11 @@ class ProfilesController < ApplicationController
 
   private
   def profile_params_html
-    params.require(:user).permit(:username, :full_name, :company, :work_location, :department, :bio)
+    params.require(:user).permit(:username, :full_name, :company, :work_location, :department, :bio, :avatar)
   end
 
   def profile_params_json
-    p = params.require(:profile).permit(:username, :display_name, :full_name, :company, :work_location, :department, :bio)
+    p = params.require(:profile).permit(:username, :display_name, :full_name, :company, :work_location, :department, :bio, :avatar)
     p[:full_name] ||= p.delete(:display_name) if p.key?(:display_name)
     p
   end
