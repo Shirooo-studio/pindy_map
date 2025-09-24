@@ -234,13 +234,6 @@ function flash(el) {
   setTimeout(() => (el.style.background = ""), 600);
 }
 
-// Turboナビゲーションごとに初期化
-document.addEventListener("turbo:load", () => {
-  if (document.getElementById("map") && window.google?.maps) {
-    window.initMap();
-  }
-});
-
 // ↓↓↓詳細ドロワーのコード
 
 // 詳細ポップアップの開閉
@@ -787,20 +780,6 @@ function openPostOverlay(place) {
   });
 }
 
-document.addEventListener("turbo:load", () => {
-  const mePanel = document.getElementById("me-panel");
-  if (!mePanel) return;
-
-  // 右パネルを開いて幅・オフセットを反映
-  openPanel();
-
-  // プロフィール読み込み
-  loadMyProfile();
-
-  // プロフィール編集
-  document.getElementById("profile-edit-btn")?.addEventListener("click", openProfileEditOverlay);
-});
-
 function activateMyTab(tab) {
   const map = {
     pins: "tab-pins",
@@ -885,19 +864,6 @@ async function loadMyPosts() {
   }
 }
 
-async function loadMyProfile() {
-  try {
-    const res = await fetch("/profile", { headers: { "Accept": "application/json" }});
-    const p = await res.json();
-    setText("#pf-username", p.username);
-    setText("#pf-display-name", p.display_name);
-    setText("#pf-company", p.company);
-    setText("#pf-dept", p.department);
-    setText("#pf-bio", p.bio);
-  } catch(_) {}
-}
-function setText(sel, v){ const el=document.querySelector(sel); if(el) el.textContent = v || "-"; }
-
 // =====================
 // プロフィール編集 オーバーレイ
 // ※ 既存の #post-overlay を共用
@@ -906,7 +872,7 @@ function openProfileEditOverlay() {
   fetch("/profile", { headers: { "Accept": "application/json" }})
     .then(r => r.json())
     .then(p => {
-      const overlay = document.getElementById("post-overlay");
+      const overlay = document.getElementById("profile-overlay");
       if (!overlay) return;
       overlay.innerHTML = `
         <div class="absolute inset-0 bg-white/80"></div>
@@ -936,6 +902,12 @@ function openProfileEditOverlay() {
                 <textarea name="profile[bio]" rows="4" class="w-full border rounded-lg p-2">${p.bio||""}</textarea>
               </div>
 
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">プロフィール画像</label>
+                <input type="file" name="profile[avatar]" accept="image/*" class="block w-full border rounded-lg p-2">
+                ${p.avatar_url ? `<img src="${p.avatar_url}" class="mt-2 w-24 h-24 rounded-full border object-cover">` : ""}
+              </div>
+
               <div id="profile-error" class="text-sm text-red-600 hidden"></div>
 
               <div class="pt-2 flex gap-2">
@@ -949,11 +921,21 @@ function openProfileEditOverlay() {
       overlay.classList.remove("hidden");
       document.body.style.overflow = "hidden";
 
+      // 上部 ✕ ボタンで閉じる
       const close = () => { overlay.classList.add("hidden"); overlay.innerHTML=""; document.body.style.overflow=""; };
       overlay.querySelector("#ov-close")?.addEventListener("click", close);
       overlay.addEventListener("click", (e) => {
         const card = overlay.querySelector("form")?.parentElement;
         if (card && !card.contains(e.target)) close();
+      });
+
+      // キャンセルボタンで閉じる
+      overlay.querySelector("#profile-cancel")?.addEventListener("click", close);
+      document.addEventListener("keydown", function escCloseOnce(ev) {
+        if (ev.key === "Escape") {
+          close();
+          document.removeEventListener("keydown", escCloseOnce);
+        }
       });
 
       const form = overlay.querySelector("#profile-form");
@@ -974,7 +956,7 @@ function openProfileEditOverlay() {
           const data = await res.json().catch(()=>({}));
           if (!res.ok) throw new Error((data && data.errors && data.errors.join("\n")) || `HTTP ${res.status}`);
           close();
-          loadMyProfile();
+          loadMyProfilePanelAndPins();
         } catch (e) {
           err.textContent = e.message || "更新に失敗しました。";
           err.classList.remove("hidden");
@@ -984,3 +966,144 @@ function openProfileEditOverlay() {
       });
     });
 }
+
+function renderPinsOnMap(pins) {
+  if(!map) return;
+  const bounds = new google.maps.LatLngBounds();
+
+  pins.forEach(p => {
+    if (!p.latitude || !p.longitude) return;
+    const pos = new google.maps.LatLng(p.latitude, p.longitude);
+    const marker = new google.maps.Marker({
+      map,
+      position: pos,
+      icon: {
+        // 見分けやすいシンプルな丸（必要ならカスタム画像に）
+        path: google.maps.SymbolPath.CIRCLE,
+        scale: 6,
+      }
+    });
+    markers.push(marker);
+    bounds.extend(pos);
+  });
+
+  if (!bounds.isEmpty()) {
+    map.fitBounds(bounds);
+  }
+}
+
+// ===== /me 用：自分のプロフィールとピン =====
+async function loadMyProfilePanelAndPins() {
+  // プロフィール
+  try {
+    console.debug("[me] fetching /profile json...");
+    const res = await fetch("/profile.json", { headers: { "Accept": "application/json" }});
+    const p = await res.json();
+
+    const set = (sel, val) => { const el = document.querySelector(sel); if (el) el.textContent = val ?? "-"; };
+    set("#pf-username", p.username);
+    set("#pf-display-name", p.display_name);
+    set("#pf-company", p.company);
+    set("#pf-dept", p.department);
+    set("#pf-bio", p.bio);
+
+    const avatarEl = document.getElementById("pf-avatar");
+    if (avatarEl) {
+      const url = p.avatar_thumb_url || p.avatar_url;
+      if (url) {
+        avatarEl.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
+      } else {
+        avatarEl.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='100%' height='100%' fill='%23e5e7eb'/></svg>";
+      }
+    }
+
+    // counts は既存の /profile JSONに無い想定なので別途取得
+    // ピン・ポスト件数の簡易反映（必要に応じてAPI側で counts を返すよう拡張してOK）
+    fetch("/me/pins", { headers: { "Accept": "application/json" }})
+      .then(r => r.json())
+      .then(pins => {
+        const el = document.querySelector("#pf-count-pins"); if (el) el.textContent = pins.length || 0;
+        renderPinsOnMap(pins);
+      }).catch(()=>{});
+
+    fetch("/me/posts", { headers: { "Accept": "application/json" }})
+      .then(r => r.json())
+      .then(posts => {
+        const el = document.querySelector("#pf-count-posts"); if (el) el.textContent = posts.length || 0;
+      }).catch(()=>{});
+
+  } catch(_) {}
+}
+
+// ===== /users/:id 用：相手のプロフィールとピン =====
+async function loadUserProfilePanelAndPins(userId) {
+  try {
+    const res = await fetch(`/users/${userId}.json`, { headers: { "Accept": "application/json" }});
+    const u = await res.json();
+
+    const set = (sel, val) => { const el = document.querySelector(sel); if (el) el.textContent = val ?? "-"; };
+    set("#u-username", u.username);
+    set("#u-display-name", u.display_name);
+    set("#u-company", u.company);
+    set("#u-dept", u.department);
+    set("#u-bio", u.bio);
+
+    set("#u-count-posts", u.counts?.posts ?? 0);
+    set("#u-count-pins", u.counts?.pins ?? 0);
+    set("#u-count-followers", u.counts?.followers ?? 0);
+    set("#u-count-following", u.counts?.following ?? 0);
+
+    // ピンをMapに描画
+    const pr = await fetch(`/users/${userId}/pins.json`, { headers: { "Accept": "application/json" }});
+    const pins = await pr.json();
+    renderPinsOnMap(pins);
+  } catch (e) {
+    console.warn(e);
+  }
+}
+
+// ===== 画面ごとの初期化 =====
+document.addEventListener("turbo:load", () => {
+  // 地図の初期化
+  if (document.getElementById("map") && window.google?.maps && typeof window.initMap === "function") {
+    window.initMap();
+  }
+
+  const editBtn = document.getElementById("profile-edit-btn");
+  if (editBtn) {
+    editBtn.addEventListener("click", (e) => {
+      e.preventDefault();
+      openProfileEditOverlay();
+    });
+  }
+
+  // /me ページ用
+  if (location.pathname === "/me") {
+    loadMyProfilePanelAndPins();
+
+    // タブ切替で読み込み
+    document.getElementById("tab-btn-posts")?.addEventListener("click", () => {
+      document.getElementById("tab-posts")?.classList.remove("hidden");
+      document.getElementById("tab-pins")?.classList.add("hidden");
+      loadMyPosts();
+    });
+
+    document.getElementById("tab-btn-pins")?.addEventListener("click", () => {
+      document.getElementById("tab-pins")?.classList.remove("hidden");
+      document.getElementById("tab-posts")?.classList.add("hidden");
+      loadMyPins();
+    });
+
+    // 初期表示で投稿タブを読み込みたいなら
+    loadMyPosts();
+
+    return;
+  }
+
+  // /users/:id ページ用
+  const m = location.pathname.match(/^\/users\/(\d+)/);
+  if (m) {
+    const userId = m[1];
+    loadUserProfilePanelAndPins(userId);
+  }
+});

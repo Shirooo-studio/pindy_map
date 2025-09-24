@@ -10,10 +10,20 @@ Rails.application.routes.draw do
   end
 
   get "/me", to: "mypage#show"
-  get "/me/pins", to: "mypage#pins"
-  get "/me/posts", to: "mypage#posts"
 
   resource :profile, only: [ :show, :new, :create, :edit, :update ]
+
+  resources :users, only: [ :show ] do
+    member do
+      get :pins
+      get :posts
+    end
+  end
+
+  resource :me, only: [] do
+    get :pins
+    get :posts
+  end
 
   # Define your application routes per the DSL in https://guides.rubyonrails.org/routing.html
 

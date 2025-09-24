@@ -1,4 +1,51 @@
-<div>
-  <h1 class="font-bold text-4xl">Profiles#edit</h1>
-  <p>Find me in app/views/profiles/edit.html.erb</p>
-</div>
+<h1 class="font-bold text-2xl mb-4">プロフィール編集</h1>
+
+<%= form_with model: @user,
+              url: profile_path,
+              method: :patch,
+              local: true,
+              html: { multipart: true, class: "space-y-3" } do |f| %>
+  <div>
+    <%= f.label :username, "ユーザー名", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_field :username, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :full_name, "名前・ニックネーム", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_field :full_name, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :company, "会社名", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_field :company, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :department, "部署", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_field :department, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :work_location, "勤務地", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_field :work_location, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :bio, "自己紹介", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.text_area :bio, rows: 4, class: "w-full border rounded-lg p-2" %>
+  </div>
+
+  <div>
+    <%= f.label :avatar, "プロフィール画像", class: "block text-sm text-gray-600 mb-1" %>
+    <%= f.file_field :avatar, accept: "image/*", class: "block w-full border rounded-lg p-2" %>
+    <% if @user.avatar.attached? %>
+      <div class="mt-2">
+        <%= image_tag @user.avatar.variant(resize_to_fill: [96, 96]), class: "rounded-full border" %>
+      </div>
+    <% end %>
+  </div>
+
+  <div>
+    <%= f.submit "更新する", class: "px-4 py-2 bg-blue-600 text-white rounded-lg" %>
+  </div>
+<% end %>
