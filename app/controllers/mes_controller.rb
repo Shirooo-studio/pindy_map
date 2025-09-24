@@ -27,7 +27,7 @@ class MesController < ApplicationController
           {
             type:   ct.start_with?("video/") ? "video" : "image",
             url:    url_for(m),
-            poster: ct.start_with?("video/") ? m.preview(resize_to_limit: [640, 360]).processed.url : nil
+            poster: ct.start_with?("video/") ? m.preview(resize_to_limit: [ 640, 360 ]).processed.url : nil
           }
         }
       }

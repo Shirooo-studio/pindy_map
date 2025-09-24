@@ -10,7 +10,7 @@ class ProfilesController < ApplicationController
         avatar_thumb_url = nil
         if u.avatar.attached?
           begin
-            avatar_thumb_url = url_for(u.avatar.variant(resize_to_fill: [96, 96]))
+            avatar_thumb_url = url_for(u.avatar.variant(resize_to_fill: [ 96, 96 ]))
           rescue => e
             Rails.logger.warn("[profile] variant failed: #{e.class}: #{e.message}")
             avatar_thumb_url = avatar_url
