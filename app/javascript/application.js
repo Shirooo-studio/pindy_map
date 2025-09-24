@@ -111,9 +111,6 @@ function showResults(results) {
           <div class="mt-1 text-sm">
             ${statusHtml}
           </div>
-          <div class="text-sm text-gray-700">
-            投稿数：<span class="post-count" data-place-id="${place.place_id}">-</span> 件
-          </div>
         </div>
         <img src="${photoUrl}" alt="" class="w-24 h-24 object-cover rounded-md border" />
       </div>
@@ -211,10 +208,13 @@ function closePanel() {
 function updateDetailTop() {
   const searchBar = document.getElementById("search-bar");
   const container = document.getElementById("map-container");
-  if (!searchBar || !container) return;
-  const bar = searchBar.getBoundingClientRect();
-  const cont = container.getBoundingClientRect();
-  const top = Math.max(8, bar.bottom - cont.top + 8);
+  if (!container) return;
+  let top = 16; // デフォルト（/me など search-bar 無しの画面）
+  if (searchBar) {
+    const bar = searchBar.getBoundingClientRect();
+    const cont = container.getBoundingClientRect();
+    top = Math.max(8, bar.bottom - cont.top + 8);
+  }
   document.body.style.setProperty("--detailTop", `${top}px`);
 }
 
@@ -448,6 +448,107 @@ function csrfToken() {
   return el?.getAttribute("content");
 }
 
+// ===== 投稿編集オーバーレイ =====
+function openEditPostOverlay(post) {
+  const overlay = document.getElementById("post-overlay");
+  if (!overlay) return;
+
+  overlay.innerHTML = `
+    <div class="absolute inset-0 bg-white/80"></div>
+    <div class="relative w-full h-full flex items-center justify-center p-4">
+      <div class="bg-white w-full max-w-2xl max-h-[90vh] overflow-auto rounded-2xl shadow-xl p-5 relative">
+        <button id="post-overlay-close" class="absolute top-3 right-3 text-gray-500 hover:text-black text-xl" aria-label="閉じる">✕</button>
+
+        <h2 class="text-lg font-semibold mb-4">投稿を編集</h2>
+        <form id="edit-post-form" class="space-y-3">
+          <input type="hidden" name="post[id]" value="${post.id}">
+
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">投稿本文</label>
+            <textarea name="post[body]" rows="5" class="w-full border rounded-lg p-2">${(post.body || "").replace(/</g,"&lt;")}</textarea>
+          </div>
+
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">タグ（カンマ区切り）</label>
+            <input type="text" name="post[tag_list]" class="w-full border rounded-lg p-2" value="${(Array.isArray(post.tags)?post.tags:[]).join(", ")}">
+          </div>
+
+          <div>
+            <label class="block text-sm text-gray-600 mb-1">画像・動画</label>
+            <input type="file" name="post[media][]" accept="image/*,video/*" multiple class="block w-full border rounded-lg p-2">
+            <p class="text-xs text-gray-500 mt-1">選択すると既存メディアは置き換えられます</p>
+          </div>
+
+          <div id="edit-post-error" class="text-sm text-red-600 hidden"></div>
+
+          <div class="pt-2 flex gap-2">
+            <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white">保存</button>
+            <button type="button" id="edit-post-cancel" class="px-4 py-2 rounded-lg border">キャンセル</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  `;
+  overlay.classList.remove("hidden");
+  document.body.style.overflow = "hidden";
+
+  const close = () => { overlay.classList.add("hidden"); overlay.innerHTML=""; document.body.style.overflow=""; };
+  overlay.querySelector("#post-overlay-close")?.addEventListener("click", close);
+  overlay.querySelector("#edit-post-cancel")?.addEventListener("click", close);
+  overlay.addEventListener("click", (e) => {
+    const card = overlay.querySelector("form")?.parentElement;
+    if (card && !card.contains(e.target)) close();
+  });
+  document.addEventListener("keydown", function escCloseOnce(ev) {
+    if (ev.key === "Escape") { close(); document.removeEventListener("keydown", escCloseOnce); }
+  });
+
+  const form = overlay.querySelector("#edit-post-form");
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const err = overlay.querySelector("#edit-post-error");
+    err.classList.add("hidden"); err.textContent = "";
+
+    const fd = new FormData(form);
+    const postId = fd.get("post[id]");
+
+    try {
+      const res = await fetch(`/posts/${postId}.json`, {
+        method: "PATCH",
+        headers: { "X-CSRF-Token": csrfToken(), "Accept": "application/json" },
+        body: fd,
+        credentials: "same-origin"
+      });
+      const data = await res.json().catch(()=>({}));
+      if (!res.ok) throw new Error((data.errors||[]).join("\n") || `HTTP ${res.status}`);
+      close();
+      loadMyPosts(); // 反映
+    } catch (e) {
+      err.textContent = e.message || "更新に失敗しました。";
+      err.classList.remove("hidden");
+    }
+  });
+}
+
+// ===== 削除 =====
+async function confirmDeletePost(id) {
+  if (!window.confirm("この投稿を削除します。よろしいですか？")) return;
+  try {
+    const res = await fetch(`/posts/${id}.json`, {
+      method: "DELETE",
+      headers: { "X-CSRF-Token": csrfToken(), "Accept": "application/json" },
+      credentials: "same-origin"
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(()=>({}));
+      throw new Error((data.errors||[]).join("\n") || `HTTP ${res.status}`);
+    }
+    loadMyPosts();
+  } catch (e) {
+    alert(e.message || "削除に失敗しました。");
+  }
+}
+
 // Place から Pin を作成（保存）
 async function savePinFromPlace(place) {
   const payload = {
@@ -488,6 +589,8 @@ function renderPlacePosts(posts) {
   const ul = document.getElementById("place-posts");
   if (!ul) return;
   ul.innerHTML = "";
+  // 左の余白を消す
+  ul.classList.add("list-none", "pl-0");
 
   if (!posts || posts.length === 0) {
     const li = document.createElement("li");
@@ -498,67 +601,53 @@ function renderPlacePosts(posts) {
   }
 
   posts.forEach((p) => {
+    // ユーザー情報
     const avatar = p.user_avatar_url ||
       "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
         `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#e5e7eb"/></svg>`
       );
     const userName = p.user_name || "アカウント名";
 
-    const first = (p.media || [])[0];
-    let heroHtml = `
-      <div class="w-full bg-gray-50">
-        <div class="w-full h-48 bg-gray-100"></div>
-      </div>`;
-    if (first) {
+    // メディア（画像 or 動画）: ある時だけ表示
+    const first = (Array.isArray(p.media) ? p.media : [])[0];
+    const mediaHtml = (() => {
+      if (!first) return "";
       if (first.type === "image") {
-        heroHtml = `
+        return `
           <div class="w-full bg-gray-50">
             <img src="${first.url}" alt="" class="w-full h-48 object-cover">
           </div>`;
       } else {
-        const posterAttr = first.poster ? ` poster="${first.poster}"` : "";
-        heroHtml = `
+        const poster = first.poster ? ` poster="${first.poster}"` : "";
+        return `
           <div class="w-full bg-gray-50">
-            <video src="${first.url}"${posterAttr} class="w-full h-48 object-cover" muted preload="metadata"></video>
+            <video src="${first.url}"${poster} class="w-full h-48 object-cover" muted controls preload="metadata"></video>
           </div>`;
       }
-    }
+    })();
 
-    const title = p.title || "";
-    const excerpt = (p.body || "").replace(/\s+/g, " ");
-    const tags = Array.isArray(p.tags) ? p.tags : [];
-    const tagsHtml = tags.slice(0,5).map(t =>
-      `<span class="px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 text-xs">${t}</span>`
-    ).join(" ");
+    // 本文（空ならプレースホルダー）
+    const rawBody = (p.body ?? "");
+    const bodyText = rawBody.replace(/^[\s\u3000]+|[\s\u3000]+$/g, "") || "（本文は未入力です）";
 
+    // 投稿のHTML
     const li = document.createElement("li");
-      li.className = "bg-white rounded-lg border overflow-hidden";
-      li.innerHTML =`
-        <div class="px-3 py-2 flex items-center gap-2 border-b">
-          <img src="${avatar}" alt="" class="w-8 h-8 rounded-full object-cover border">
-          <span class="text-sm text-gray-700">${userName}</span>
+    li.className = "bg-white rounded-lg border overflow-hidden";
+    li.innerHTML = `
+      <div class="px-3 py-2 flex items-center gap-2 border-b">
+        <img src="${avatar}" alt="" class="w-8 h-8 rounded-full object-cover border">
+        <span class="text-sm text-gray-700">${userName}</span>
+      </div>
+
+      ${mediaHtml}
+
+      <div class="px-3 py-2">
+        <div class="text-sm text-gray-700 leading-relaxed">
+          ${bodyText}
         </div>
-
-        ${heroHtml}
-
-        <div class="px-3 py-2">
-          <div class="flex items-center gap-3 mb-2">
-            <button class="text-pink-600" title="いいね">❤</button>
-            <button class="text-gray-600" title="コメント">💬</button>
-            <div class="flex flex-wrap gap-2 ml-auto">${tagsHtml}</div>
-          </div>
-
-          <div class="text-sm text-gray-900 font-medium mb-1">${title}</div>
-          <div class="text-sm text-gray-700 leading-relaxed">
-            ${excerpt.length > 80 ? excerpt.slice(0,80) + "…" : excerpt || "（本文は未入力です）"}
-          </div>
-
-          <div class="mt-1">
-            <a href="/posts/${p.id}" class="text-xs text-gray-500 hover:underline">続きを読む</a>
-          </div>
-        </div>
-      `;
-      ul.appendChild(li);
+      </div>
+    `;
+    ul.appendChild(li);
   });
 }
 
@@ -687,11 +776,6 @@ function openPostOverlay(place) {
         </div>
 
         <div>
-          <label class="block text-sm text-gray-600 mb-1">タグ（カンマ区切り）</label>
-          <input type="text" name="post[tag_list]" class="w-full border rounded-lg p-2" placeholder="例：ランチ, 個室, 接待">
-        </div>
-
-        <div>
           <label class="block text-sm text-gray-600 mb-1">公開範囲</label>
           <select name="post[visibility]" class="w-full border rounded-lg p-2">
             <option value="everyone">全員に公開</option>
@@ -795,28 +879,14 @@ async function loadMyPins() {
   if (!ul) return;
   ul.innerHTML = `<li class="text-sm text-gray-500">読み込み中...</li>`;
   try {
-    const res = await fetch("/me/pins", {  headers: { "Accept": "application/json" }});
+    const res = await fetch("/me/pins", { headers: { "Accept": "application/json" }});
     const pins = await res.json();
     ul.innerHTML = "";
     if (pins.length === 0) {
       ul.innerHTML = `<li class="text-sm text-gray-500">ピンはまだありません。</li>`;
       return;
     }
-    pins.forEach(p => {
-      const li = document.createElement("li");
-      li.className = "flex items-center justify-between bg-white border rounded-lg p-3";
-      li.innerHTML = `
-        <div>
-          <div class="font-medium">${p.name ?? ""}</div>
-          <div class="text-sm text-gray-600">${p.address ?? ""}</div>
-          <div class="text-xs text-gray-500 mt-1">投稿数：${p.posts_count || 0}</div>
-        </div>
-        <a class="text-blue-600 hover:underline text-sm"
-        href="https://www.google.com/maps/search/?api=1&query=&query_place_id=${p.google_place_id}"
-        target="_blank" rel="noopener">地図で見る</a>
-      `;
-      ul.appendChild(li);
-    });
+    renderMyPins(pins);  // ← ここで呼び出す！
   } catch(_) {
     ul.innerHTML = `<li class="text-sm text-red-600">読み込みに失敗しました。</li>`;
   }
@@ -826,38 +896,92 @@ async function loadMyPosts() {
   const ul = document.getElementById("my-posts");
   if (!ul) return;
   ul.innerHTML = `<li class="text-sm text-gray-500">読み込み中...</li>`;
+
   try {
     const res = await fetch("/me/posts", { headers: { "Accept": "application/json" }});
     const posts = await res.json();
+
     ul.innerHTML = "";
     if (!posts.length) {
       ul.innerHTML = `<li class="text-sm text-gray-500">投稿はまだありません。</li>`;
       return;
     }
-    // 既存のカードUIと同じ見た目で1枚ずつ
+
     posts.forEach(p => {
-      const first = (p.media || [])[0];
-      let hero = `<div class="w-full h-48 bg-gray-100"></div>`;
+      const first = (Array.isArray(p.media) ? p.media : [])[0];
+
+      // メディアブロック（左カラム）— 画像/動画が無ければ空
+      let mediaBlock = "";
       if (first) {
-        hero = first.type === "image"
-          ? `<img src="${first.url}" class="w-full h-48 object-cover">`
-          : `<video src="${first.url}" ${first.poster ? `poster="${first.poster}"` : ""} class="w-full h-48 object-cover" muted controls preload="metadata"></video>`;
+        if (first.type === "image") {
+          mediaBlock = `
+            <div class="w-40 h-28 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+              <img src="${first.url}" alt="" class="w-full h-full object-cover">
+            </div>`;
+        } else {
+          const poster = first.poster ? ` poster="${first.poster}"` : "";
+          mediaBlock = `
+            <div class="w-40 h-28 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+              <video src="${first.url}"${poster} class="w-full h-full object-cover" muted controls preload="metadata"></video>
+            </div>`;
+        }
       }
+
+      // 本文（常に出す）
+      const bodyText = (p.body ?? "").replace(/^[\s\u3000]+|[\s\u3000]+$/g, "") || "（本文は未入力です）";
+
+      // カードDOM
       const li = document.createElement("li");
       li.className = "bg-white rounded-lg border overflow-hidden";
-      li.innerHTML =`
-        <div class="w-full bg-gray-50">${hero}</div>
-        <div class="px-3 py-2">
-          <div class="text-sm text-gray-900 font-medium mb-1">${p.title || ""}</div>
-          <div class="text-sm text-gray-700 leading-relaxed">
-            ${(p.body || "").replace(/\s+/g," ").slice(0,80)}${(p.body||"").length>80?"…":""}
+
+      // 2カラム/1カラムの切り替え
+      if (mediaBlock) {
+        // 画像あり → 左サムネ + 右本文
+        li.innerHTML = `
+          <div class="p-3 flex gap-3">
+            ${mediaBlock}
+            <div class="flex-1 min-w-0">
+              <div class="flex items-start gap-2 mb-2">
+                <div class="ml-auto flex gap-2">
+                  <button type="button"
+                          class="btn-edit px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-xs hover:bg-yellow-200"
+                          title="編集">✏ 編集</button>
+                  <button type="button"
+                          class="btn-delete px-2 py-1 rounded bg-red-100 text-red-700 text-xs hover:bg-red-200"
+                          title="削除">🗑 削除</button>
+                </div>
+              </div>
+              <div class="text-sm text-gray-700 leading-relaxed break-words">
+                ${bodyText.replace(/</g,"&lt;")}
+              </div>
+            </div>
           </div>
-          <div class="mt-1">
-            <a href="/posts/${p.id}" class="text-xs text-gray-500 hover:underline">続きを読む</a>
+        `;
+      } else {
+        // 画像なし → ワンカラム
+        li.innerHTML = `
+          <div class="p-3">
+            <div class="flex items-start gap-2 mb-2">
+              <div class="ml-auto flex gap-2">
+                <button type="button"
+                        class="btn-edit px-2 py-1 rounded bg-yellow-100 text-yellow-700 text-xs hover:bg-yellow-200"
+                        title="編集">✏ 編集</button>
+                <button type="button"
+                        class="btn-delete px-2 py-1 rounded bg-red-100 text-red-700 text-xs hover:bg-red-200"
+                        title="削除">🗑 削除</button>
+              </div>
+            </div>
+            <div class="text-sm text-gray-700 leading-relaxed break-words">
+              ${bodyText.replace(/</g,"&lt;")}
+            </div>
           </div>
-        </div>
-      `;
+        `;
+      }
+
+      // ボタンクリック
       ul.appendChild(li);
+      li.querySelector(".btn-edit")?.addEventListener("click", () => openEditPostOverlay(p));
+      li.querySelector(".btn-delete")?.addEventListener("click", () => confirmDeletePost(p.id));
     });
   } catch(_) {
     ul.innerHTML = `<li class="text-sm text-red-600">読み込みに失敗しました。</li>`;
@@ -971,16 +1095,23 @@ function renderPinsOnMap(pins) {
   if(!map) return;
   const bounds = new google.maps.LatLngBounds();
 
+  const PIN_PATH = "M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5a2.5 2.5 0 1 1 0-5 2.5 2.5 0 0 1 0 5z";
+
   pins.forEach(p => {
     if (!p.latitude || !p.longitude) return;
     const pos = new google.maps.LatLng(p.latitude, p.longitude);
+
     const marker = new google.maps.Marker({
       map,
       position: pos,
       icon: {
-        // 見分けやすいシンプルな丸（必要ならカスタム画像に）
-        path: google.maps.SymbolPath.CIRCLE,
-        scale: 6,
+        path: PIN_PATH,
+        fillColor: "#22c55e",     // 緑（Tailwind green-500）
+        fillOpacity: 1,
+        strokeColor: "#166534",   // 濃い緑（green-700）
+        strokeWeight: 1.5,
+        scale: 1.8,               // 大きさ調整
+        anchor: new google.maps.Point(12, 22) // 先端を座標に合わせる
       }
     });
     markers.push(marker);
@@ -1080,6 +1211,7 @@ document.addEventListener("turbo:load", () => {
   // /me ページ用
   if (location.pathname === "/me") {
     loadMyProfilePanelAndPins();
+    openPanel();
 
     // タブ切替で読み込み
     document.getElementById("tab-btn-posts")?.addEventListener("click", () => {
@@ -1107,3 +1239,62 @@ document.addEventListener("turbo:load", () => {
     loadUserProfilePanelAndPins(userId);
   }
 });
+
+function renderMyPins(pins) {
+  const list = document.getElementById("my-pins");
+  if (!list) return;
+  list.innerHTML = "";
+
+  pins.forEach(pin => {
+    const li = document.createElement("li");
+    li.className = "p-3 hover:bg-gray-100 cursor-pointer border-b";
+    li.dataset.placeId = pin.google_place_id;
+
+    // 右側サムネ（Placesの1枚目）
+    const thumb = document.createElement("img");
+    thumb.className = "w-24 h-24 object-cover rounded-md border";
+    if (map && service) {
+      service.getDetails({ placeId: pin.google_place_id, fields: ["photos"] }, (place, status) => {
+        if (status === google.maps.places.PlacesServiceStatus.OK && place?.photos?.length) {
+          thumb.src = place.photos[0].getUrl({ maxWidth: 200, maxHeight: 200 });
+        } else {
+          thumb.src = "data:image/svg+xml;utf8," +
+            encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96"><rect width="100%" height="100%" fill="#e5e7eb"/></svg>');
+        }
+      });
+    }
+
+    // 左側テキスト
+    const info = document.createElement("div");
+    info.className = "flex-1 min-w-0";
+    info.innerHTML = `
+      <div class="font-semibold truncate">${pin.name ?? ""}</div>
+      <div class="text-sm text-gray-600 truncate">${pin.address ?? ""}</div>
+      <div class="mt-1 text-xs text-green-700 bg-green-100 px-2 py-0.5 rounded inline-block">保存済み</div>
+    `;
+
+    const row = document.createElement("div");
+    row.className = "flex gap-3 items-center";
+    row.appendChild(info);
+    row.appendChild(thumb);
+    li.appendChild(row);
+
+    // ✅ クリックで：地図オフセット移動 → 詳細パネル表示
+    li.addEventListener("click", () => {
+      if (service) {
+        service.getDetails({ placeId: pin.google_place_id, fields: ["geometry"] }, (place, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+            // 検索結果と同じ「右UIぶんオフセット」移動
+            focusPlaceWithRightUIOffset(place.geometry.location);
+          }
+          // 地図移動の成否に関わらずパネルは開く
+          showPlaceDetails(pin.google_place_id);
+        });
+      } else {
+        showPlaceDetails(pin.google_place_id);
+      }
+    });
+
+    list.appendChild(li);
+  });
+}

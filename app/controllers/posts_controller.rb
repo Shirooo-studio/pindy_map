@@ -9,16 +9,14 @@ class PostsController < ApplicationController
 
     posts =
       if Post.column_names.include?("pin_id")
-        # 新スキーマ: pin 経由
-        pins = Pin.where(google_place_id: pid)
         Post.includes(:user, media_attachments: :blob)
-            .where(pin_id: pins.select(:id))
+            .joins(:pin)
+            .where(pins: { google_place_id: pid })
             .order(created_at: :desc)
             .limit(50)
       else
-        # 旧スキーマ: place_id 直接
         Post.includes(:user, media_attachments: :blob)
-            .where(place_id: pid)
+            .where(google_place_id: pid) # place_id → google_place_id に揃える
             .order(created_at: :desc)
             .limit(50)
       end
@@ -26,17 +24,17 @@ class PostsController < ApplicationController
     render json: posts.map { |p|
       {
         id: p.id,
-        title: p.try(:title).to_s,
-        body: p.try(:body).to_s,
-        user_name: p.user&.username.presence || p.user&.full_name.presence || p.user&.email || "アカウント名",
-        user_avatar_url: nil,
+        title: p.title.to_s,
+        body:  p.body.to_s,
+        user_name: p.user&.full_name.presence || p.user&.username || p.user&.email || "アカウント名",
+        user_avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [32, 32])) : nil),
         media: p.media.map do |att|
           ct = att.content_type.to_s
           if ct.start_with?("video/")
             {
               type: "video",
               url: url_for(att),
-              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [ 640, 360 ]).processed) : nil)
+              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640, 360]).processed) : nil)
             }
           else
             {
@@ -44,29 +42,29 @@ class PostsController < ApplicationController
               url: url_for(att)
             }
           end
-        end,
-        tags: []
+        end
       }
     }
   end
 
   # GET /posts/count_by_place?place_ids=aaa,bbb
-  def count_by_place
-    ids = params[:place_ids].to_s.split(",").map(&:strip).reject(&:blank?).uniq.first(100)
-    return render json: {} if ids.empty?
+  #def count_by_place
+  #  ids = params[:place_ids].to_s.split(",").map(&:strip).reject(&:blank?).uniq.first(100)
+  #  return render json: {} if ids.empty?
 
-    if Post.column_names.include?("pin_id")
-      # 新スキーマ: pins 経由で google_place_id ごとに集計
-      counts = Pin.where(google_place_id: ids)
-                  .joins(:posts)
-                  .group("pins.google_place_id")
-                  .count
-      render json: counts
-    else
-      # 旧スキーマ: place_id に直接カウント
-      render json: Post.where(place_id: ids).group(:place_id).count
-    end
-  end
+  #  if Post.column_names.include?("pin_id")
+  #    counts = Pin.where(google_place_id: ids)
+  #                .joins(:posts)
+  #                .group("pins.google_place_id")
+  #                .count
+  #    render json: counts
+  #  else
+  #    counts = Post.where(google_place_id: ids) # place_id → google_place_id に修正
+  #                .group(:google_place_id)
+  #                .count
+  #    render json: counts
+  #  end
+  #end
 
   # GET /posts or /posts.json
   def index
@@ -105,7 +103,7 @@ class PostsController < ApplicationController
       post = current_user.posts.new(
         title: post_params[:title],
         body: post_params[:body],
-        place_id: place_id
+        google_place_id: place_id
       )
     end
 
