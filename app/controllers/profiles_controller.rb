@@ -40,7 +40,7 @@ class ProfilesController < ApplicationController
   def create
     @user = current_user
     if @user.update(profile_params_html.merge(profile_completed: true))
-      redirect_to root_path, notice: "アカウント情報を登録しました。"
+      redirect_to me_path, notice: "アカウント情報を登録しました。"
     else
       render :new, status: :unprocessable_entity
     end
@@ -55,12 +55,13 @@ class ProfilesController < ApplicationController
     respond_to do |format|
       format.html do
         if @user.update(profile_params_html)
-          redirect_to root_path, notice: "更新しました。"
+          redirect_to me_path, notice: "更新しました。"   # ← ここを root_path から変更
         else
           render :edit, status: :unprocessable_entity
         end
       end
 
+      # JSON分岐は必要なら残してOK（他の機能が使っている可能性）
       format.json do
         if @user.update(profile_params_json)
           render json: { ok: true }
