@@ -68,7 +68,60 @@ class PostsController < ApplicationController
 
   # GET /posts or /posts.json
   def index
-    @posts = Post.all
+    respond_to do |format|
+      format.html
+      format.json do
+        q = params[:q].to_s.strip
+        rel = Post.includes(:user, :pin, media_attachments: :blob).order(created_at: :desc)
+        rel = rel.where("COALESCE(posts.body,'') ILIKE :q OR COALESCE(posts.title,'') ILIKE :q", q: "%#{q}%") if q.present?
+
+        render json: rel.limit(100).map { |p|
+          # google_place_id と座標を安全に取得（pin あり/なし両対応）
+          gid = if Post.column_names.include?("pin_id")
+                  p.pin&.google_place_id
+                else
+                  p.google_place_id || p.place_id
+                end
+          lat = if Post.column_names.include?("pin_id")
+                  p.pin&.latitude
+                else
+                  p.latitude
+                end
+          lng = if Post.column_names.include?("pin_id")
+                  p.pin&.longitude
+                else
+                  p.longitude
+                end
+
+          user_data = {
+            username: (p.user&.username.presence || "user"),
+            avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [32, 32])) : nil)
+          }
+
+          {
+            id: p.id,
+            title: p.title.to_s,
+            body:  p.body.to_s,
+            user: user_data,
+            google_place_id: gid,
+            latitude: lat,
+            longitude: lng,
+            media: p.media.map { |att|
+              ct = att.content_type.to_s
+              if ct.start_with?("video/")
+                {
+                  type: "video",
+                  url: url_for(att),
+                  poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640,360]).processed) : nil)
+                }
+              else
+                { type: "image", url: url_for(att) }
+              end
+            }
+          }
+        }
+      end
+    end
   end
 
   # GET /posts/1 or /posts/1.json

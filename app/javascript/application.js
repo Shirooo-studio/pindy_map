@@ -1238,6 +1238,12 @@ document.addEventListener("turbo:load", () => {
     const userId = m[1];
     loadUserProfilePanelAndPins(userId);
   }
+
+  // /posts 検索ページ
+  if (location.pathname === "/posts") {
+    initPostsSearchPage();
+    return;
+  }
 });
 
 function renderMyPins(pins) {
@@ -1296,5 +1302,149 @@ function renderMyPins(pins) {
     });
 
     list.appendChild(li);
+  });
+}
+
+async function fetchPostsByQuery(q) {
+  const url = `/posts.json?q=${encodeURIComponent(q || "")}`;
+  const res = await fetch(url, { headers: { "Accept": "application/json" }});
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+function renderPostsSearchResults(posts) {
+  const ul = document.getElementById("posts-results");
+  if (!ul) return;
+  ul.innerHTML = "";
+
+  if (!posts || posts.length === 0) {
+    ul.innerHTML = `<li class="text-sm text-gray-500">該当する投稿はありません。</li>`;
+    return;
+  }
+
+  posts.forEach(p => {
+    const first = (Array.isArray(p.media) ? p.media : [])[0];
+    const user = p.user?.username || "user";
+    const avatar = p.user?.avatar_url
+      ? `<img src="${p.user.avatar_url}" class="w-6 h-6 rounded-full object-cover border" alt="avatar">`
+      : `<div class="w-6 h-6 rounded-full bg-gray-300"></div>`;
+
+    const mediaBlock = first ? (
+      first.type === "image"
+        ? `<div class="w-40 h-28 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+            <img src="${first.url}" alt="" class="w-full h-full object-cover">
+          </div>`
+        : `<div class="w-40 h-28 bg-gray-100 rounded-md overflow-hidden flex-shrink-0">
+            <video src="${first.url}" ${first.poster?`poster="${first.poster}"`:""}
+                    class="w-full h-full object-cover" muted controls preload="metadata"></video>
+          </div>`
+    ) : "";
+
+    const bodyText = (p.body || "").trim() || "（本文は未入力です）";
+
+    const li = document.createElement("li");
+    li.className = "bg-white rounded-lg border overflow-hidden cursor-pointer hover:bg-gray-50";
+    li.dataset.placeId = p.google_place_id || "";   // ← 付与！
+    li.innerHTML = `
+      <div class="p-3 flex gap-3">
+        ${mediaBlock || ""}
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1 text-sm text-gray-700">
+            ${avatar}<span>@${user}</span>
+          </div>
+          <div class="text-sm text-gray-700 leading-relaxed break-words">
+            ${bodyText.replace(/</g, "&lt;")}
+          </div>
+        </div>
+      </div>`;
+
+    // クリック → マップ中央へ移動 + 詳細パネル表示
+    li.addEventListener("click", () => {
+      const pid = li.dataset.placeId;
+      if (!pid) return; // place 紐付け無しの投稿
+
+      // 緯度経度が JSON にあるなら即オフセット移動、無ければ Places 詳細で取得
+      if (p.latitude && p.longitude) {
+        const ll = new google.maps.LatLng(p.latitude, p.longitude);
+        focusPlaceWithRightUIOffset(ll);
+        showPlaceDetails(pid);
+      } else if (service) {
+        service.getDetails({ placeId: pid, fields: ["geometry"] }, (place, status) => {
+          if (status === google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
+            focusPlaceWithRightUIOffset(place.geometry.location);
+          }
+          showPlaceDetails(pid);
+        });
+      } else {
+        showPlaceDetails(pid);
+      }
+    });
+
+    ul.appendChild(li);
+  });
+
+  // ← 検索結果の場所を地図にマーカー表示
+  renderMarkersForPosts(posts);
+}
+
+function initPostsSearchPage() {
+  openPanel(); // 右パネル幅を反映させる（重なり防止）
+
+  const input = document.getElementById("post-search-input");
+  const btn   = document.getElementById("post-search-btn");
+  const doSearch = async () => {
+    const q = input.value.trim();
+    const ul = document.getElementById("posts-results");
+    if (ul) ul.innerHTML = `<li class="text-sm text-gray-500">検索中...</li>`;
+    try {
+      const posts = await fetchPostsByQuery(q);
+      renderPostsSearchResults(posts);
+    } catch (e) {
+      if (ul) ul.innerHTML = `<li class="text-sm text-red-600">検索に失敗しました。</li>`;
+    }
+  };
+
+  input?.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doSearch(); }});
+  btn?.addEventListener("click", doSearch);
+
+  // URLに ?q= があれば初期検索
+  const urlQ = new URLSearchParams(location.search).get("q");
+  if (urlQ) { input.value = urlQ; doSearch(); }
+}
+
+function renderMarkersForPosts(posts) {
+  if (!map || !service) return;
+
+  // 既存マーカーをクリア（/posts では地図はこの用途なので全消しでOK）
+  clearMarkers();
+
+  const seen = new Set();
+  posts.forEach(p => {
+    const pid = p.google_place_id;
+    if (!pid || seen.has(pid)) return;
+    seen.add(pid);
+
+    // 緯度経度がAPIで返っているなら非同期を待たずに置ける
+    if (p.latitude && p.longitude) {
+      const pos = new google.maps.LatLng(p.latitude, p.longitude);
+      const mk = new google.maps.Marker({ map, position: pos });
+      markers.push(mk);
+      mk.addListener("click", () => {
+        focusPlaceWithRightUIOffset(pos);
+        showPlaceDetails(pid);
+      });
+      return;
+    }
+
+    // 位置が無い場合は Places Details で取得
+    service.getDetails({ placeId: pid, fields: ["geometry"] }, (place, status) => {
+      if (status !== google.maps.places.PlacesServiceStatus.OK || !place?.geometry?.location) return;
+      const mk = new google.maps.Marker({ map, position: place.geometry.location });
+      markers.push(mk);
+      mk.addListener("click", () => {
+        focusPlaceWithRightUIOffset(place.geometry.location);
+        showPlaceDetails(pid);
+      });
+    });
   });
 }
