@@ -27,14 +27,14 @@ class PostsController < ApplicationController
         title: p.title.to_s,
         body:  p.body.to_s,
         user_name: p.user&.full_name.presence || p.user&.username || p.user&.email || "アカウント名",
-        user_avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [32, 32])) : nil),
+        user_avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [ 32, 32 ])) : nil),
         media: p.media.map do |att|
           ct = att.content_type.to_s
           if ct.start_with?("video/")
             {
               type: "video",
               url: url_for(att),
-              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640, 360]).processed) : nil)
+              poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [ 640, 360 ]).processed) : nil)
             }
           else
             {
@@ -48,7 +48,7 @@ class PostsController < ApplicationController
   end
 
   # GET /posts/count_by_place?place_ids=aaa,bbb
-  #def count_by_place
+  # def count_by_place
   #  ids = params[:place_ids].to_s.split(",").map(&:strip).reject(&:blank?).uniq.first(100)
   #  return render json: {} if ids.empty?
 
@@ -64,7 +64,7 @@ class PostsController < ApplicationController
   #                .count
   #    render json: counts
   #  end
-  #end
+  # end
 
   # GET /posts or /posts.json
   def index
@@ -79,23 +79,23 @@ class PostsController < ApplicationController
           # google_place_id と座標を安全に取得（pin あり/なし両対応）
           gid = if Post.column_names.include?("pin_id")
                   p.pin&.google_place_id
-                else
+          else
                   p.google_place_id || p.place_id
-                end
+          end
           lat = if Post.column_names.include?("pin_id")
                   p.pin&.latitude
-                else
+          else
                   p.latitude
-                end
+          end
           lng = if Post.column_names.include?("pin_id")
                   p.pin&.longitude
-                else
+          else
                   p.longitude
-                end
+          end
 
           user_data = {
             username: (p.user&.username.presence || "user"),
-            avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [32, 32])) : nil)
+            avatar_url: (p.user&.avatar&.attached? ? url_for(p.user.avatar.variant(resize_to_fill: [ 32, 32 ])) : nil)
           }
 
           {
@@ -112,7 +112,7 @@ class PostsController < ApplicationController
                 {
                   type: "video",
                   url: url_for(att),
-                  poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [640,360]).processed) : nil)
+                  poster: (att.previewable? ? url_for(att.preview(resize_to_limit: [ 640, 360 ]).processed) : nil)
                 }
               else
                 { type: "image", url: url_for(att) }
