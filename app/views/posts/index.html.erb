@@ -3,15 +3,21 @@
 <div id="map-container" class="relative">
   <div id="map" class="h-screen w-full"></div>
 
-  <!-- 検索バー -->
-  <div id="search-bar" class="absolute left-52 top-3 bg-white rounded-full shadow px-4 py-2 w-[70vw] max-w-xl">
-    <input id="search-input" class="w-full outline-none" placeholder="キーワードで検索（例：カフェ 名駅）" />
-  </div>
+  <!-- 右パネル（pins/me と同じ CSS を再利用）-->
+  <aside id="search-panel" class="search-panel hidden" aria-label="ポスト検索">
+    <div class="p-3 space-y-3">
+      <h2 class="text-lg font-semibold">ポスト検索</h2>
 
-  <!-- 右スライドパネル -->
-  <aside id="search-panel" class="search-panel hidden">
-    <h2 class="p-3 font-bold border-b">検索結果</h2>
-    <ul id="results-list"></ul>
+      <div class="bg-white border rounded-lg p-2 flex gap-2">
+        <input id="post-search-input"
+              class="flex-1 outline-none"
+              placeholder="本文・タイトルで検索（例：ランチ, おしゃれ）" />
+        <button id="post-search-btn"
+                class="px-3 py-1.5 rounded bg-blue-600 text-white text-sm">検索</button>
+      </div>
+
+      <ul id="posts-results" class="space-y-4"></ul>
+    </div>
   </aside>
 
   <!-- ポップアップ型 詳細 -->
@@ -19,3 +25,4 @@
     <div id="detail-body" class="p-0"></div>
   </div>
 </div>
+
