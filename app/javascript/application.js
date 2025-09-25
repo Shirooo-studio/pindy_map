@@ -602,10 +602,6 @@ function renderPlacePosts(posts) {
 
   posts.forEach((p) => {
     // ユーザー情報
-    const avatar = p.user_avatar_url ||
-      "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(
-        `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="16" fill="#e5e7eb"/></svg>`
-      );
     const userName = p.user_name || "アカウント名";
 
     // メディア（画像 or 動画）: ある時だけ表示
@@ -635,7 +631,6 @@ function renderPlacePosts(posts) {
     li.className = "bg-white rounded-lg border overflow-hidden";
     li.innerHTML = `
       <div class="px-3 py-2 flex items-center gap-2 border-b">
-        <img src="${avatar}" alt="" class="w-8 h-8 rounded-full object-cover border">
         <span class="text-sm text-gray-700">${userName}</span>
       </div>
 
@@ -993,46 +988,73 @@ async function loadMyPosts() {
 // ※ 既存の #post-overlay を共用
 // =====================
 function openProfileEditOverlay() {
-  fetch("/profile", { headers: { "Accept": "application/json" }})
-    .then(r => r.json())
-    .then(p => {
-      const overlay = document.getElementById("profile-overlay");
-      if (!overlay) return;
+  // 既存CSRFヘルパーを利用
+  const token = csrfToken() || "";
+
+  // オーバーレイの入れ物を（無ければ）作る
+  let overlay = document.getElementById("profile-overlay");
+  if (!overlay) {
+    overlay = document.createElement("div");
+    overlay.id = "profile-overlay";
+    overlay.className = "fixed inset-0 z-[9999] hidden";
+    document.body.appendChild(overlay);
+  }
+
+  // 1) 現在値の取得（表示のためだけ。送信は同期なのでJSで送らない）
+  fetch("/profile.json", { headers: { "Accept": "application/json" } })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+    .catch(() => ({})) // 失敗しても空で続行
+    .then((p) => {
+      const displayName = p.display_name || p.full_name || "";
+
       overlay.innerHTML = `
         <div class="absolute inset-0 bg-white/80"></div>
         <div class="relative w-full h-full flex items-center justify-center p-4">
           <div class="bg-white w-full max-w-xl max-h-[90vh] overflow-auto rounded-2xl shadow-xl p-5 relative">
             <button id="ov-close" class="absolute top-3 right-3 text-gray-500 hover:text-black text-xl" aria-label="閉じる">✕</button>
             <h2 class="text-lg font-semibold mb-4">プロフィール編集</h2>
-            <form id="profile-form" class="space-y-3">
+
+            <!-- ★同期送信フォーム：Turbo無効化 -->
+            <form id="profile-form"
+                  action="/profile"
+                  method="post"
+                  enctype="multipart/form-data"
+                  data-turbo="false"
+                  class="space-y-3">
+
+              <input type="hidden" name="_method" value="patch">
+              <input type="hidden" name="authenticity_token" value="${token}">
+
               <div>
                 <label class="block text-sm text-gray-600 mb-1">ユーザー名</label>
-                <input name="profile[username]" class="w-full border rounded-lg p-2" value="${p.username||""}">
+                <input name="user[username]" class="w-full border rounded-lg p-2" value="${p.username || ""}">
               </div>
+
               <div>
                 <label class="block text-sm text-gray-600 mb-1">名前・ニックネーム</label>
-                <input name="profile[display_name]" class="w-full border rounded-lg p-2" value="${p.display_name||""}">
+                <!-- HTMLはfull_nameで受ける。初期値はdisplay_name優先 -->
+                <input name="user[full_name]" class="w-full border rounded-lg p-2" value="${displayName}">
               </div>
+
               <div>
                 <label class="block text-sm text-gray-600 mb-1">会社名</label>
-                <input name="profile[company]" class="w-full border rounded-lg p-2" value="${p.company||""}">
+                <input name="user[company]" class="w-full border rounded-lg p-2" value="${p.company || ""}">
               </div>
+
               <div>
                 <label class="block text-sm text-gray-600 mb-1">部署名</label>
-                <input name="profile[department]" class="w-full border rounded-lg p-2" value="${p.department||""}">
+                <input name="user[department]" class="w-full border rounded-lg p-2" value="${p.department || ""}">
               </div>
+
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">勤務地</label>
+                <input name="user[work_location]" class="w-full border rounded-lg p-2" value="${p.work_location || ""}">
+              </div>
+
               <div>
                 <label class="block text-sm text-gray-600 mb-1">自己紹介</label>
-                <textarea name="profile[bio]" rows="4" class="w-full border rounded-lg p-2">${p.bio||""}</textarea>
+                <textarea name="user[bio]" rows="4" class="w-full border rounded-lg p-2">${p.bio || ""}</textarea>
               </div>
-
-              <div>
-                <label class="block text-sm text-gray-600 mb-1">プロフィール画像</label>
-                <input type="file" name="profile[avatar]" accept="image/*" class="block w-full border rounded-lg p-2">
-                ${p.avatar_url ? `<img src="${p.avatar_url}" class="mt-2 w-24 h-24 rounded-full border object-cover">` : ""}
-              </div>
-
-              <div id="profile-error" class="text-sm text-red-600 hidden"></div>
 
               <div class="pt-2 flex gap-2">
                 <button type="submit" class="px-4 py-2 rounded-lg bg-blue-600 text-white">保存</button>
@@ -1042,51 +1064,35 @@ function openProfileEditOverlay() {
           </div>
         </div>
       `;
+
+      // 表示
       overlay.classList.remove("hidden");
       document.body.style.overflow = "hidden";
 
-      // 上部 ✕ ボタンで閉じる
-      const close = () => { overlay.classList.add("hidden"); overlay.innerHTML=""; document.body.style.overflow=""; };
+      // 閉じる関数
+      const close = () => {
+        overlay.classList.add("hidden");
+        overlay.innerHTML = "";
+        document.body.style.overflow = "";
+      };
+
+      // 閉じるイベント
       overlay.querySelector("#ov-close")?.addEventListener("click", close);
+      overlay.querySelector("#profile-cancel")?.addEventListener("click", close);
       overlay.addEventListener("click", (e) => {
         const card = overlay.querySelector("form")?.parentElement;
         if (card && !card.contains(e.target)) close();
       });
-
-      // キャンセルボタンで閉じる
-      overlay.querySelector("#profile-cancel")?.addEventListener("click", close);
-      document.addEventListener("keydown", function escCloseOnce(ev) {
-        if (ev.key === "Escape") {
-          close();
-          document.removeEventListener("keydown", escCloseOnce);
-        }
+      document.addEventListener("keydown", function escOnce(ev) {
+        if (ev.key === "Escape") { close(); document.removeEventListener("keydown", escOnce); }
       });
 
+      // ★ 送信時は「何もしない」＝ブラウザの通常送信に任せる
+      //     もし二重送信防止だけ入れたい場合は以下（通信は介入しない）
       const form = overlay.querySelector("#profile-form");
-      form.addEventListener("submit", async (e) => {
-        e.preventDefault();
-        const err = overlay.querySelector("#profile-error");
-        err.classList.add("hidden"); err.textContent = "";
-        const fd = new FormData(form);
-
+      form?.addEventListener("submit", () => {
         const btn = form.querySelector('button[type="submit"]');
-        const prev = btn.textContent; btn.disabled=true; btn.textContent="保存中...";
-        try {
-          const res = await fetch("/profile", {
-            method: "PATCH",
-            headers: { "X-CSRF-Token": csrfToken(), "Accept": "application/json" },
-            body: fd, credentials: "same-origin"
-          });
-          const data = await res.json().catch(()=>({}));
-          if (!res.ok) throw new Error((data && data.errors && data.errors.join("\n")) || `HTTP ${res.status}`);
-          close();
-          loadMyProfilePanelAndPins();
-        } catch (e) {
-          err.textContent = e.message || "更新に失敗しました。";
-          err.classList.remove("hidden");
-        } finally {
-          btn.disabled=false; btn.textContent=prev;
-        }
+        if (btn) { btn.disabled = true; btn.textContent = "保存中..."; }
       });
     });
 }
@@ -1137,16 +1143,6 @@ async function loadMyProfilePanelAndPins() {
     set("#pf-company", p.company);
     set("#pf-dept", p.department);
     set("#pf-bio", p.bio);
-
-    const avatarEl = document.getElementById("pf-avatar");
-    if (avatarEl) {
-      const url = p.avatar_thumb_url || p.avatar_url;
-      if (url) {
-        avatarEl.src = `${url}${url.includes("?") ? "&" : "?"}t=${Date.now()}`;
-      } else {
-        avatarEl.src = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='80'><rect width='100%' height='100%' fill='%23e5e7eb'/></svg>";
-      }
-    }
 
     // counts は既存の /profile JSONに無い想定なので別途取得
     // ピン・ポスト件数の簡易反映（必要に応じてAPI側で counts を返すよう拡張してOK）
@@ -1325,9 +1321,6 @@ function renderPostsSearchResults(posts) {
   posts.forEach(p => {
     const first = (Array.isArray(p.media) ? p.media : [])[0];
     const user = p.user?.username || "user";
-    const avatar = p.user?.avatar_url
-      ? `<img src="${p.user.avatar_url}" class="w-6 h-6 rounded-full object-cover border" alt="avatar">`
-      : `<div class="w-6 h-6 rounded-full bg-gray-300"></div>`;
 
     const mediaBlock = first ? (
       first.type === "image"
@@ -1350,7 +1343,7 @@ function renderPostsSearchResults(posts) {
         ${mediaBlock || ""}
         <div class="flex-1 min-w-0">
           <div class="flex items-center gap-2 mb-1 text-sm text-gray-700">
-            ${avatar}<span>@${user}</span>
+            <span>@${user}</span>
           </div>
           <div class="text-sm text-gray-700 leading-relaxed break-words">
             ${bodyText.replace(/</g, "&lt;")}
