@@ -1,7 +1,19 @@
 Rails.application.routes.draw do
-  root "pins#index"
-
   devise_for :users, controllers: { registrations: "users/registrations" }
+
+  authenticated :user do
+    root "pins#index", as: :authenticated_root
+  end
+  unauthenticated do
+    devise_scope :user do
+      root to: "devise/sessions#new", as: :unauthenticated_root
+    end
+  end
+
+  get "/", to: redirect { |params, request|
+    request.env[ "warden" ].authenticate? ? "/pins" : "/users/sign_in"
+  }, as: :root
+
   resources :pins do
     collection { get :check }
   end
